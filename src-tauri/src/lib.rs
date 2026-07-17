@@ -30,12 +30,15 @@ struct AppState {
 }
 
 #[tauri::command]
-async fn environment_status(state: tauri::State<'_, AppState>) -> Result<EnvironmentStatus, String> {
+async fn environment_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<EnvironmentStatus, String> {
     let llm_provider = std::env::var("LLM_PROVIDER")
         .unwrap_or_else(|_| "deepseek".to_string())
         .to_lowercase();
 
-    let has_local_whisper_model = transcription::whisper_cli_exists() || transcription::whisper_python_exists();
+    let has_local_whisper_model =
+        transcription::whisper_cli_exists() || transcription::whisper_python_exists();
 
     let has_ollama = reqwest::Client::new()
         .get("http://localhost:11434")
@@ -45,7 +48,9 @@ async fn environment_status(state: tauri::State<'_, AppState>) -> Result<Environ
         .is_ok();
 
     let env_key_set = |name: &str| -> bool {
-        std::env::var(name).map(|v| !v.trim().is_empty()).unwrap_or(false)
+        std::env::var(name)
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false)
     };
 
     Ok(EnvironmentStatus {
@@ -65,12 +70,9 @@ async fn environment_status(state: tauri::State<'_, AppState>) -> Result<Environ
 }
 
 #[tauri::command]
-async fn pull_ollama_model(
-    app: tauri::AppHandle,
-    model_name: String,
-) -> Result<(), String> {
+async fn pull_ollama_model(app: tauri::AppHandle, model_name: String) -> Result<(), String> {
     let client = reqwest::Client::new();
-    
+
     let mut response = client
         .post("http://localhost:11434/api/pull")
         .json(&serde_json::json!({
@@ -109,7 +111,8 @@ async fn pull_ollama_model(
                 let completed = val.get("completed").and_then(|v| v.as_u64());
                 let total = val.get("total").and_then(|v| v.as_u64());
 
-                let mut status = val.get("status")
+                let mut status = val
+                    .get("status")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Downloading...")
                     .to_string();
@@ -119,15 +122,19 @@ async fn pull_ollama_model(
                         let c_mb = c as f64 / 1024.0 / 1024.0;
                         let t_mb = t as f64 / 1024.0 / 1024.0;
                         if t_mb > 100.0 {
-                            status = format!("Downloading weights: {:.1} MB / {:.1} MB", c_mb, t_mb);
+                            status =
+                                format!("Downloading weights: {:.1} MB / {:.1} MB", c_mb, t_mb);
                         } else {
-                            status = format!("Downloading model components: {:.1} MB / {:.1} MB", c_mb, t_mb);
+                            status = format!(
+                                "Downloading model components: {:.1} MB / {:.1} MB",
+                                c_mb, t_mb
+                            );
                         }
                     } else {
                         status = "Downloading model components...".to_string();
                     }
                 }
-                
+
                 let percentage = if let (Some(c), Some(t)) = (completed, total) {
                     if t > 0 {
                         Some((c as f64 / t as f64) * 100.0)
@@ -155,17 +162,25 @@ async fn pull_ollama_model(
 
 #[tauri::command]
 async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = app.emit("ollama-install-status", "Checking if Ollama is already installed...");
+    let _ = app.emit(
+        "ollama-install-status",
+        "Checking if Ollama is already installed...",
+    );
     let launch = std::process::Command::new("open")
         .args(["-a", "Ollama"])
         .output();
-    
+
     if let Ok(out) = launch {
         if out.status.success() {
             let _ = app.emit("ollama-install-status", "Ollama is installed. Launching...");
             for _ in 0..12 {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                if reqwest::Client::new().get("http://localhost:11434").send().await.is_ok() {
+                if reqwest::Client::new()
+                    .get("http://localhost:11434")
+                    .send()
+                    .await
+                    .is_ok()
+                {
                     let _ = app.emit("ollama-install-status", "Ollama started successfully!");
                     return Ok(());
                 }
@@ -182,8 +197,11 @@ async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
     };
 
     if let Some(path) = brew_path {
-        let _ = app.emit("ollama-install-status", "Installing Ollama via Homebrew Cask...");
-        
+        let _ = app.emit(
+            "ollama-install-status",
+            "Installing Ollama via Homebrew Cask...",
+        );
+
         let output = std::process::Command::new(path)
             .args(["install", "--cask", "ollama"])
             .output()
@@ -200,12 +218,17 @@ async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
         let launch = std::process::Command::new("open")
             .args(["-a", "Ollama"])
             .output();
-        
+
         if let Ok(out) = launch {
             if out.status.success() {
                 for _ in 0..12 {
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                    if reqwest::Client::new().get("http://localhost:11434").send().await.is_ok() {
+                    if reqwest::Client::new()
+                        .get("http://localhost:11434")
+                        .send()
+                        .await
+                        .is_ok()
+                    {
                         let _ = app.emit("ollama-install-status", "Ollama started successfully!");
                         return Ok(());
                     }
@@ -214,30 +237,47 @@ async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
 
-    let _ = app.emit("ollama-install-status", "Downloading Ollama zip from official source...");
+    let _ = app.emit(
+        "ollama-install-status",
+        "Downloading Ollama zip from official source...",
+    );
     let temp_dir = std::env::temp_dir();
     let zip_path = temp_dir.join("Ollama-darwin.zip");
-    
+
     let response = reqwest::get("https://ollama.com/download/Ollama-darwin.zip")
         .await
         .map_err(|e| format!("Failed to download Ollama: {e}"))?;
 
-    let bytes = response.bytes().await.map_err(|e| format!("Failed to read Ollama bytes: {e}"))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read Ollama bytes: {e}"))?;
     std::fs::write(&zip_path, bytes).map_err(|e| format!("Failed to save Ollama zip: {e}"))?;
 
     let _ = app.emit("ollama-install-status", "Unzipping Ollama package...");
     let unzip_output = std::process::Command::new("unzip")
-        .args(["-o", zip_path.to_string_lossy().as_ref(), "-d", temp_dir.to_string_lossy().as_ref()])
+        .args([
+            "-o",
+            zip_path.to_string_lossy().as_ref(),
+            "-d",
+            temp_dir.to_string_lossy().as_ref(),
+        ])
         .output()
         .map_err(|e| format!("Failed to unzip Ollama: {e}"))?;
 
     if !unzip_output.status.success() {
-        return Err(format!("Failed to unzip: {}", String::from_utf8_lossy(&unzip_output.stderr)));
+        return Err(format!(
+            "Failed to unzip: {}",
+            String::from_utf8_lossy(&unzip_output.stderr)
+        ));
     }
 
-    let _ = app.emit("ollama-install-status", "Installing to Applications folder...");
+    let _ = app.emit(
+        "ollama-install-status",
+        "Installing to Applications folder...",
+    );
     let app_src = temp_dir.join("Ollama.app");
-    
+
     let mv_output = std::process::Command::new("mv")
         .args([app_src.to_string_lossy().as_ref(), "/Applications/"])
         .output()
@@ -247,15 +287,22 @@ async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
         let user_apps = dirs::home_dir()
             .ok_or_else(|| "Could not find home directory".to_string())?
             .join("Applications");
-        std::fs::create_dir_all(&user_apps).map_err(|e| format!("Failed to create ~/Applications: {e}"))?;
-        
+        std::fs::create_dir_all(&user_apps)
+            .map_err(|e| format!("Failed to create ~/Applications: {e}"))?;
+
         let mv_user_output = std::process::Command::new("mv")
-            .args([&app_src.to_string_lossy().to_string(), &user_apps.to_string_lossy().to_string()])
+            .args([
+                &app_src.to_string_lossy().to_string(),
+                &user_apps.to_string_lossy().to_string(),
+            ])
             .output()
             .map_err(|e| format!("Failed to move Ollama to ~/Applications: {e}"))?;
 
         if !mv_user_output.status.success() {
-            return Err(format!("Failed to install Ollama to Applications folder: {}", String::from_utf8_lossy(&mv_user_output.stderr)));
+            return Err(format!(
+                "Failed to install Ollama to Applications folder: {}",
+                String::from_utf8_lossy(&mv_user_output.stderr)
+            ));
         }
     }
 
@@ -267,7 +314,12 @@ async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
     if launch.is_ok() {
         for _ in 0..12 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if reqwest::Client::new().get("http://localhost:11434").send().await.is_ok() {
+            if reqwest::Client::new()
+                .get("http://localhost:11434")
+                .send()
+                .await
+                .is_ok()
+            {
                 let _ = app.emit("ollama-install-status", "Ollama started successfully!");
                 return Ok(());
             }
@@ -380,11 +432,14 @@ async fn transcribe_project(
         let app = app_handle.clone();
         let pid = project_id.clone();
         move |stage: &str, percent: f64| {
-            let _ = app.emit("transcription-progress", TranscriptionProgressPayload {
-                project_id: pid.clone(),
-                stage: stage.to_string(),
-                percent,
-            });
+            let _ = app.emit(
+                "transcription-progress",
+                TranscriptionProgressPayload {
+                    project_id: pid.clone(),
+                    stage: stage.to_string(),
+                    percent,
+                },
+            );
         }
     };
 
@@ -396,12 +451,12 @@ async fn transcribe_project(
                     "Set DEEPGRAM_API_KEY or paste an API key to use cloud transcription."
                         .to_string()
                 })?;
-            
+
             let extract_progress = {
                 let emit = emit_progress.clone();
                 Box::new(move |p: f64| emit("Extracting Audio", p)) as Box<dyn Fn(f64) + Send>
             };
-            
+
             let audio_path = media::extract_audio_with_progress(
                 &project.source_path,
                 &data_dir.join("projects").join(&project_id),
@@ -416,7 +471,8 @@ async fn transcribe_project(
                 .map_err(to_command_error)?
         }
         "local" => {
-            let has_whisper = transcription::whisper_cli_exists() || transcription::whisper_python_exists();
+            let has_whisper =
+                transcription::whisper_cli_exists() || transcription::whisper_python_exists();
             if !has_whisper {
                 return Err("Whisper is not installed. Please install it (e.g., via Homebrew 'brew install whisper-cli' or via Python 'pip3 install openai-whisper').".to_string());
             }
@@ -445,7 +501,7 @@ async fn transcribe_project(
                 &audio_path.to_string_lossy(),
                 &data_dir.to_string_lossy(),
                 duration_sec,
-                Some(transcribe_progress)
+                Some(transcribe_progress),
             )
             .await
             .map_err(to_command_error)?
@@ -520,22 +576,21 @@ async fn import_custom_transcript(
 ) -> Result<Transcript, String> {
     let normalized = transcription::parse_vtt(&vtt_content)
         .map_err(|e| format!("Failed to parse custom transcript: {e}"))?;
-        
+
     let raw_json = serde_json::to_string_pretty(&normalized).map_err(to_command_error)?;
-    
+
     let saved = state
         .db
         .save_transcript(&project_id, "custom", &raw_json, Some(&normalized.language))
         .map_err(to_command_error)?;
-        
+
     state
         .db
         .update_project_status(&project_id, "analyzing", Some(normalized.duration))
         .map_err(to_command_error)?;
-        
+
     Ok(saved)
 }
-
 
 #[tauri::command]
 async fn review_candidate_cmd(
@@ -546,14 +601,20 @@ async fn review_candidate_cmd(
     model_name: Option<String>,
 ) -> Result<crate::models::CandidateReview, String> {
     // We need the transcript to pull out the candidate's text.
-    let (candidate, project) = state.db.get_candidate_with_project(&candidate_id).map_err(|e| e.to_string())?;
-    
-    // Get the global transcript
-    let transcript = state.db.latest_transcript(&project.id).map_err(|e| e.to_string())?;
-    let transcript = transcript.ok_or_else(|| "No transcript found".to_string())?;
-    let normalized_transcript: NormalizedTranscript = serde_json::from_str(&transcript.raw_json)
+    let (candidate, project) = state
+        .db
+        .get_candidate_with_project(&candidate_id)
         .map_err(|e| e.to_string())?;
-        
+
+    // Get the global transcript
+    let transcript = state
+        .db
+        .latest_transcript(&project.id)
+        .map_err(|e| e.to_string())?;
+    let transcript = transcript.ok_or_else(|| "No transcript found".to_string())?;
+    let normalized_transcript: NormalizedTranscript =
+        serde_json::from_str(&transcript.raw_json).map_err(|e| e.to_string())?;
+
     // Extract the text for the candidate's segments
     let mut candidate_text = String::new();
     let remapped_words = crate::remap_transcript(&normalized_transcript.words, &candidate.segments);
@@ -561,7 +622,7 @@ async fn review_candidate_cmd(
         candidate_text.push_str(&w.text);
         candidate_text.push(' ');
     }
-    
+
     // Call the LLM
     let review = llm::review_candidate(
         &candidate_id,
@@ -569,14 +630,18 @@ async fn review_candidate_cmd(
         &provider,
         api_key.as_deref(),
         model_name.as_deref(),
-    ).await.map_err(|e| e.to_string())?;
-    
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Save the review
-    state.db.save_candidate_review(&review).map_err(|e| e.to_string())?;
-    
+    state
+        .db
+        .save_candidate_review(&review)
+        .map_err(|e| e.to_string())?;
+
     Ok(review)
 }
-
 
 #[tauri::command]
 async fn predict_viral_cmd(
@@ -587,14 +652,20 @@ async fn predict_viral_cmd(
     model_name: Option<String>,
 ) -> Result<crate::models::ViralPrediction, String> {
     // We need the transcript to pull out the candidate's text.
-    let (candidate, project) = state.db.get_candidate_with_project(&candidate_id).map_err(|e| e.to_string())?;
-    
-    // Get the global transcript
-    let transcript = state.db.latest_transcript(&project.id).map_err(|e| e.to_string())?;
-    let transcript = transcript.ok_or_else(|| "No transcript found".to_string())?;
-    let normalized_transcript: NormalizedTranscript = serde_json::from_str(&transcript.raw_json)
+    let (candidate, project) = state
+        .db
+        .get_candidate_with_project(&candidate_id)
         .map_err(|e| e.to_string())?;
-        
+
+    // Get the global transcript
+    let transcript = state
+        .db
+        .latest_transcript(&project.id)
+        .map_err(|e| e.to_string())?;
+    let transcript = transcript.ok_or_else(|| "No transcript found".to_string())?;
+    let normalized_transcript: NormalizedTranscript =
+        serde_json::from_str(&transcript.raw_json).map_err(|e| e.to_string())?;
+
     // Extract the text for the candidate's segments
     let mut candidate_text = String::new();
     let remapped_words = crate::remap_transcript(&normalized_transcript.words, &candidate.segments);
@@ -602,7 +673,7 @@ async fn predict_viral_cmd(
         candidate_text.push_str(&w.text);
         candidate_text.push(' ');
     }
-    
+
     // Call the LLM
     let prediction = llm::predict_viral(
         &candidate_id,
@@ -610,11 +681,16 @@ async fn predict_viral_cmd(
         &provider,
         api_key.as_deref(),
         model_name.as_deref(),
-    ).await.map_err(|e| e.to_string())?;
-    
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Save the prediction
-    state.db.save_candidate_prediction(&prediction).map_err(|e| e.to_string())?;
-    
+    state
+        .db
+        .save_candidate_prediction(&prediction)
+        .map_err(|e| e.to_string())?;
+
     Ok(prediction)
 }
 
@@ -640,7 +716,14 @@ async fn generate_candidates(
         .unwrap_or_else(|| "deepseek".to_string())
         .to_lowercase();
 
-    let all_providers = vec!["claude", "deepseek", "gemini", "openai", "openrouter", "local"];
+    let all_providers = vec![
+        "claude",
+        "deepseek",
+        "gemini",
+        "openai",
+        "openrouter",
+        "local",
+    ];
     let mut try_list = vec![active_provider.clone()];
     for p in all_providers {
         if p != active_provider && p != "ollama" {
@@ -654,7 +737,9 @@ async fn generate_candidates(
     for p in try_list {
         let result = match p.as_str() {
             "claude" => {
-                let key = api_keys.as_ref().and_then(|keys| keys.get("claude").cloned())
+                let key = api_keys
+                    .as_ref()
+                    .and_then(|keys| keys.get("claude").cloned())
                     .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
                     .filter(|v| !v.trim().is_empty());
                 if let Some(key) = key {
@@ -664,7 +749,9 @@ async fn generate_candidates(
                 }
             }
             "deepseek" => {
-                let key = api_keys.as_ref().and_then(|keys| keys.get("deepseek").cloned())
+                let key = api_keys
+                    .as_ref()
+                    .and_then(|keys| keys.get("deepseek").cloned())
                     .or_else(|| std::env::var("DEEPSEEK_API_KEY").ok())
                     .filter(|v| !v.trim().is_empty());
                 if let Some(key) = key {
@@ -674,7 +761,9 @@ async fn generate_candidates(
                 }
             }
             "gemini" => {
-                let key = api_keys.as_ref().and_then(|keys| keys.get("gemini").cloned())
+                let key = api_keys
+                    .as_ref()
+                    .and_then(|keys| keys.get("gemini").cloned())
                     .or_else(|| std::env::var("GEMINI_API_KEY").ok())
                     .filter(|v| !v.trim().is_empty());
                 if let Some(key) = key {
@@ -684,7 +773,9 @@ async fn generate_candidates(
                 }
             }
             "openai" => {
-                let key = api_keys.as_ref().and_then(|keys| keys.get("openai").cloned())
+                let key = api_keys
+                    .as_ref()
+                    .and_then(|keys| keys.get("openai").cloned())
                     .or_else(|| std::env::var("OPENAI_API_KEY").ok())
                     .filter(|v| !v.trim().is_empty());
                 if let Some(key) = key {
@@ -694,7 +785,9 @@ async fn generate_candidates(
                 }
             }
             "openrouter" => {
-                let key = api_keys.as_ref().and_then(|keys| keys.get("openrouter").cloned())
+                let key = api_keys
+                    .as_ref()
+                    .and_then(|keys| keys.get("openrouter").cloned())
                     .or_else(|| std::env::var("OPENROUTER_API_KEY").ok())
                     .filter(|v| !v.trim().is_empty());
                 if let Some(key) = key {
@@ -737,7 +830,10 @@ async fn generate_candidates(
     }
 
     let drafts = drafts_opt.ok_or_else(|| {
-        format!("All available LLM providers failed.\nErrors:\n{}", errors.join("\n"))
+        format!(
+            "All available LLM providers failed.\nErrors:\n{}",
+            errors.join("\n")
+        )
     })?;
 
     if drafts.is_empty() {
@@ -763,7 +859,7 @@ fn add_manual_candidate(
         .db
         .add_manual_candidate(&project_id, start_sec, end_sec)
         .map_err(to_command_error)?;
-    
+
     // Return the updated list of candidates
     state
         .db
@@ -816,24 +912,22 @@ fn render_flat_clip_for_candidate(
     };
 
     if let Ok(Some(transcript_record)) = state.db.latest_transcript(&project.id) {
-        if let Ok(normalized) = serde_json::from_str::<NormalizedTranscript>(&transcript_record.raw_json) {
+        if let Ok(normalized) =
+            serde_json::from_str::<NormalizedTranscript>(&transcript_record.raw_json)
+        {
             let remapped_words = remap_transcript(&normalized.words, &candidate.segments);
             let total_dur: f64 = candidate.segments.iter().map(|s| s.end - s.start).sum();
-            
+
             let srt_content = generate_srt(&remapped_words, 0.0, total_dur);
-            let clip_srt_path = project_dir(&state, &project.id).join(format!("clip-{}.srt", candidate.id));
+            let clip_srt_path =
+                project_dir(&state, &project.id).join(format!("clip-{}.srt", candidate.id));
             if std::fs::write(&clip_srt_path, srt_content).is_ok() {
                 srt_path = Some(clip_srt_path);
             }
             if media::drawtext_supported() {
                 let style = project.caption_style.as_deref().unwrap_or("modern-box");
-                let drawtext = build_drawtext_filters(
-                    &remapped_words,
-                    0.0,
-                    total_dur,
-                    cropped_width,
-                    style,
-                );
+                let drawtext =
+                    build_drawtext_filters(&remapped_words, 0.0, total_dur, cropped_width, style);
                 if !drawtext.is_empty() {
                     drawtext_filters = Some(drawtext);
                 }
@@ -896,7 +990,13 @@ fn render_flat_clip_for_candidate(
                     let message = retry_err.to_string();
                     state
                         .db
-                        .update_clip_for_candidate(&candidate_id, "error", None, None, Some(&message))
+                        .update_clip_for_candidate(
+                            &candidate_id,
+                            "error",
+                            None,
+                            None,
+                            Some(&message),
+                        )
                         .map_err(to_command_error)?;
                     Err(message)
                 }
@@ -907,7 +1007,10 @@ fn render_flat_clip_for_candidate(
 
 #[tauri::command]
 fn delete_project(state: tauri::State<'_, AppState>, project_id: String) -> Result<(), String> {
-    state.db.delete_project(&project_id).map_err(to_command_error)
+    state
+        .db
+        .delete_project(&project_id)
+        .map_err(to_command_error)
 }
 
 #[tauri::command]
@@ -916,7 +1019,10 @@ fn rename_project(
     project_id: String,
     name: String,
 ) -> Result<(), String> {
-    state.db.rename_project(&project_id, &name).map_err(to_command_error)
+    state
+        .db
+        .rename_project(&project_id, &name)
+        .map_err(to_command_error)
 }
 
 #[tauri::command]
@@ -938,7 +1044,7 @@ async fn update_transcript(
     segments: Vec<TranscriptSegment>,
 ) -> Result<(), String> {
     let db = state.db.clone();
-    
+
     // Get existing transcript
     let existing = db
         .latest_transcript(&project_id)
@@ -947,14 +1053,19 @@ async fn update_transcript(
 
     let mut normalized: NormalizedTranscript =
         serde_json::from_str(&existing.raw_json).map_err(to_command_error)?;
-        
+
     normalized.words = words;
     normalized.segments = segments;
 
     let updated_json = serde_json::to_string(&normalized).map_err(to_command_error)?;
 
-    db.save_transcript(&project_id, &existing.engine, &updated_json, existing.language.as_deref())
-        .map_err(to_command_error)?;
+    db.save_transcript(
+        &project_id,
+        &existing.engine,
+        &updated_json,
+        existing.language.as_deref(),
+    )
+    .map_err(to_command_error)?;
 
     Ok(())
 }
@@ -968,7 +1079,7 @@ async fn generate_candidate_metadata_cmd(
     model_name: Option<String>,
 ) -> Result<(), String> {
     let db = state.db.clone();
-    
+
     // Fetch candidate and project
     let (candidate, project) = db
         .get_candidate_with_project(&candidate_id)
@@ -979,10 +1090,10 @@ async fn generate_candidate_metadata_cmd(
         .latest_transcript(&project.id)
         .map_err(to_command_error)?
         .ok_or_else(|| "No transcript found".to_string())?;
-        
+
     let normalized: NormalizedTranscript =
         serde_json::from_str(&transcript.raw_json).map_err(to_command_error)?;
-        
+
     // Extract text for candidate segment using midpoint to avoid missing straddling words
     let mut candidate_text = String::new();
     for seg in &candidate.segments {
@@ -994,7 +1105,7 @@ async fn generate_candidate_metadata_cmd(
             }
         }
     }
-    
+
     let active_key = match provider.as_str() {
         "deepseek" => api_key.or_else(|| std::env::var("DEEPSEEK_API_KEY").ok()),
         "claude" => api_key.or_else(|| std::env::var("ANTHROPIC_API_KEY").ok()),
@@ -1004,11 +1115,11 @@ async fn generate_candidate_metadata_cmd(
         "ollama" => Some("".to_string()),
         _ => None,
     };
-    
+
     if active_key.is_none() {
         return Err(format!("API key for {} is missing.", provider));
     }
-    
+
     let metadata = llm::generate_candidate_metadata(
         &candidate.hook,
         &candidate.rationale,
@@ -1016,11 +1127,17 @@ async fn generate_candidate_metadata_cmd(
         &provider,
         &active_key.unwrap(),
         model_name.as_deref().unwrap_or(""),
-    ).await.map_err(to_command_error)?;
-    
-    db.update_candidate_metadata(&candidate_id, Some(&metadata.title), Some(&metadata.description))
-        .map_err(to_command_error)?;
-        
+    )
+    .await
+    .map_err(to_command_error)?;
+
+    db.update_candidate_metadata(
+        &candidate_id,
+        Some(&metadata.title),
+        Some(&metadata.description),
+    )
+    .map_err(to_command_error)?;
+
     Ok(())
 }
 
@@ -1035,7 +1152,8 @@ pub fn run() {
                 .app_data_dir()
                 .context("resolving app data directory")?;
             std::fs::create_dir_all(&data_dir).context("creating app data directory")?;
-            std::fs::create_dir_all(data_dir.join("models")).context("creating models directory")?;
+            std::fs::create_dir_all(data_dir.join("models"))
+                .context("creating models directory")?;
             let db = Database::open(&data_dir.join("autoshorts.sqlite"))?;
             app.manage(AppState { db, data_dir });
             Ok(())
@@ -1193,10 +1311,7 @@ fn generate_srt(words: &[TranscriptWord], start_sec: f64, end_sec: f64) -> Strin
             .join(" ");
 
         srt.push_str(&format!("{index}\n"));
-        srt.push_str(&format!(
-            "{}\n",
-            format_srt_time(start_rel, end_rel)
-        ));
+        srt.push_str(&format!("{}\n", format_srt_time(start_rel, end_rel)));
         srt.push_str(&format!("{text}\n\n"));
         index += 1;
     }
@@ -1204,20 +1319,22 @@ fn generate_srt(words: &[TranscriptWord], start_sec: f64, end_sec: f64) -> Strin
     srt
 }
 
-
-pub fn remap_transcript(words: &[TranscriptWord], segments: &[crate::models::SegmentRange]) -> Vec<TranscriptWord> {
+pub fn remap_transcript(
+    words: &[TranscriptWord],
+    segments: &[crate::models::SegmentRange],
+) -> Vec<TranscriptWord> {
     let mut remapped = Vec::new();
     let mut current_offset = 0.0;
-    
+
     for seg in segments {
         for w in words {
             let overlap_start = w.start.max(seg.start);
             let overlap_end = w.end.min(seg.end);
-            
+
             if overlap_start < overlap_end {
                 let new_start = current_offset + (overlap_start - seg.start);
                 let new_end = current_offset + (overlap_end - seg.start);
-                
+
                 remapped.push(TranscriptWord {
                     start: new_start,
                     end: new_end,
@@ -1278,16 +1395,17 @@ fn build_drawtext_filters(
             .join(" ");
 
         // Clean text to avoid breaking FFmpeg filter parameters while keeping punctuation
-        let clean_text: String = text.chars()
+        let clean_text: String = text
+            .chars()
             .filter(|c| c.is_alphanumeric() || c.is_ascii_punctuation() || *c == ' ')
             .collect();
         let clean_text = clean_text
             .replace('\'', "’") // Replace with unicode smart quote to avoid FFmpeg escaping hell
-            .replace('"', "”")  // Replace with unicode smart quote
+            .replace('"', "”") // Replace with unicode smart quote
             .replace(':', "：") // Replace with fullwidth colon
             .replace('%', "％") // Replace with fullwidth percent
             .replace('\\', ""); // Strip backslashes completely
-        // Responsive font size and padding box
+                                // Responsive font size and padding box
         let fontsize = ((cropped_width as f64) * 0.075).clamp(16.0, 80.0).round() as i64;
         let padding = ((fontsize as f64) * 0.3).clamp(4.0, 24.0).round() as i64;
 
@@ -1318,7 +1436,7 @@ fn build_drawtext_filters(
                 break;
             }
         }
-        
+
         let drawtext = match caption_style {
             "classic-outline" => {
                 // Classic yellow text with a bold outline (CapCut style)

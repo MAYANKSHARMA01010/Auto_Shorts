@@ -142,7 +142,9 @@ pub fn extract_audio_with_progress(
         }
     }
 
-    let output = child.wait_with_output().context("waiting for ffmpeg audio extraction")?;
+    let output = child
+        .wait_with_output()
+        .context("waiting for ffmpeg audio extraction")?;
 
     if !output.status.success() {
         return Err(anyhow!(
@@ -153,7 +155,6 @@ pub fn extract_audio_with_progress(
 
     Ok(output_path)
 }
-
 
 pub fn render_flat_clip(
     source_path: &str,
@@ -186,7 +187,7 @@ pub fn render_flat_clip(
     for (i, seg) in segments.iter().enumerate() {
         let start = format!("{:.3}", seg.start);
         let end = format!("{:.3}", seg.end);
-        
+
         if has_video {
             filter_complex.push_str(&format!(
                 "[0:v]trim=start={}:end={},setpts=PTS-STARTPTS[v{}]; ",
@@ -208,13 +209,13 @@ pub fn render_flat_clip(
             concat_inputs.push_str(&format!("[a{}]", i));
         }
     }
-    
+
     if has_video {
         filter_complex.push_str(&format!(
             "{}concat=n={}:v=1:a=1[vout][aout]; ",
             concat_inputs, n
         ));
-        
+
         // 3. Post-processing on [vout]
         let mut final_v_filter = "[vout]split[a][b];[a]scale=-1:1920,crop=1080:1920,boxblur=20:20[bg];[b]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2".to_string();
         if let Some(drawtext) = drawtext_filters {
@@ -223,15 +224,14 @@ pub fn render_flat_clip(
             }
         }
         filter_complex.push_str(&format!("{}[final_v]", final_v_filter));
-        
+
         cmd.args(["-filter_complex", &filter_complex]);
         cmd.args(["-map", "[final_v]", "-map", "[aout]"]);
-        cmd.args(["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"]);
+        cmd.args([
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+        ]);
     } else {
-        filter_complex.push_str(&format!(
-            "{}concat=n={}:v=0:a=1[aout]",
-            concat_inputs, n
-        ));
+        filter_complex.push_str(&format!("{}concat=n={}:v=0:a=1[aout]", concat_inputs, n));
         cmd.args(["-filter_complex", &filter_complex]);
         cmd.args(["-map", "[aout]"]);
         cmd.arg("-vn");

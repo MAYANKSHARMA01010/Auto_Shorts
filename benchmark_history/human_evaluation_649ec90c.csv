@@ -1,0 +1,4 @@
+video_id,category,candidate_index,hook,strategy,ai_confidence,ai_score,human_overall_score
+vid_01,Podcast,0,AI is changing the world.,N/A,N/A,9.7,
+vid_02,Tutorial,0,Today I'll show you how to bake a cake.,before -> after,0.92,9.7,
+vid_03,Comedy,0,The unexpected twist of a cow at the store checkout,setup -> payoff,0.95,9.5,

@@ -1,1 +1,27 @@
-# AutoShorts Phase 4 Benchmark Report\n\n**Date:** 2026-07-17T12:22:36.082101\n**Model:** qwen2.5\n**Prompt Version:** 833a643e\n**Dataset Version:** v1.0 (3 videos)\n\n## Mode A vs Mode B Comparison\n\n| Metric | Mode A (Single Pass) | Mode B (Two Pass Analyzer) |\n|---|---|---|\n| json_validity | 3/3 | 3/3 |\n| parsing_success | 3/3 | 3/3 |\n| llm_failures | 0/3 | 0/3 |\n| Avg Time per Video | 53.68s | 55.68s |\n| Avg Prompt Tokens | 708.3 | 1014.3 |\n| Avg Completion Tokens | 570.0 | 575.3 |\n| Total Candidates | 13 | 9 |\n| Avg Segments/Candidate | 1.00 | 1.11 |\n| Avg AI Confidence | 0.00 | 0.00 |\n| Avg AI Score | 9.36 | 9.40 |\n\n## Regression Analysis\n*No baseline found. Saving current Mode B as baseline.*\n\n### Overall Status: **PASS**\n
+# AutoShorts Phase 4.5 Benchmark Report
+
+**Date:** 2026-07-17T18:07:51.568905
+**Model:** qwen2.5
+**Prompt Version:** 649ec90c
+**Dataset Version:** v1.0 (3 videos)
+
+## Performance Metrics
+
+| Metric | Result |
+|---|---|
+| json_validity | 3/3 |
+| parsing_success | 3/3 |
+| llm_failures | 0/3 |
+| Avg Time per Video | 24.66s |
+| Avg Prompt Tokens | 892.3 |
+| Avg Completion Tokens | 199.7 |
+| Total Candidates | 3 |
+| Avg Segments/Candidate | 1.00 |
+| Avg AI Confidence | 0.94 |
+| Avg AI Score | 9.63 |
+
+## Regression Analysis (vs Phase 4 Baseline)
+- ✅ Parsing Success steady or improved (3).
+- ✅ Latency acceptable (24.66s vs old 55.68s).
+
+### Overall Status: **PASS**

@@ -1,4 +1,3 @@
-
 fn get_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(180))
@@ -12,9 +11,9 @@ use serde_json::json;
 
 use crate::models::{CandidateDraft, NormalizedTranscript, TranscriptSegment};
 
-fn build_prompt(segments: &str, analysis: &str) -> String {
+fn build_prompt(segments: &str) -> String {
     format!(
-r#"You are an expert short-form video editor for YouTube Shorts, Instagram Reels, and TikTok.
+        r#"You are an expert short-form video editor for YouTube Shorts, Instagram Reels, and TikTok.
 Your goal is to create the most engaging, complete, and natural story possible. You are NOT a timestamp finder; you are creating a brand new edit. The transcript represents raw footage.
 
 ==================================================
@@ -26,14 +25,6 @@ EDITOR PHILOSOPHY & PRINCIPLES
 - There is no preferred editing style. Only viewer retention matters.
 - A clip MUST be at least 30 seconds long.
 - A complete story with a slightly lower viral potential is ALWAYS better than an incomplete story with a higher viral score.
-
-==================================================
-STORY ANALYZER & CONTENT CLASSIFICATION
-==================================================
-The following analysis has been performed on the transcript:
-{analysis}
-
-Adapt your editing strategy automatically based on this analysis.
 
 ==================================================
 EDITING STYLES & DIVERSITY
@@ -64,15 +55,14 @@ INTERNAL MULTI-PASS REASONING
 ==================================================
 Perform the following reasoning internally before producing your answer. Do NOT reveal your reasoning. Return ONLY the required JSON.
 - Pass 1: Understand transcript
-- Pass 2: Identify interesting moments
-- Pass 3: Group related moments
-- Pass 4: Determine content type
-- Pass 5: Choose editing strategy
+- Pass 2: Identify content type (e.g., Storytelling, Tutorial, Comedy)
+- Pass 3: Identify emotional peaks and hooks
+- Pass 4: Group related moments
+- Pass 5: Choose editing strategy (e.g., problem -> solution, montage)
 - Pass 6: Construct complete story
 - Pass 7: Optimize pacing
 - Pass 8: Merge nearby segments
-- Pass 9: Remove weak moments
-- Pass 10: Validate final edit
+- Pass 9: Validate final edit
 
 ==================================================
 OPTIONAL METADATA
@@ -101,39 +91,8 @@ Return ONLY valid JSON strictly in the following schema:
 
 Transcript:
 {segments}"#,
-        analysis = analysis,
         segments = segments
     )
-}
-
-pub async fn analyze_story(
-    segments_text: &str,
-    api_key: Option<&str>,
-    provider: &str,
-    model_name: &str,
-) -> String {
-    let prompt = format!(
-        "You are an expert story analyzer for short-form video.\n\
-        Analyze the following transcript.\n\
-        Output a short, concise analysis consisting of exactly 3 parts:\n\
-        1. CONTENT TYPE: (e.g., Storytelling, Tutorial, Podcast, Interview, Comedy, Educational, Documentary)\n\
-        2. EMOTIONAL PEAKS: (Briefly list 2-3 most engaging moments)\n\
-        3. RECOMMENDED STRATEGY: (Briefly suggest the best editing structure such as 'problem -> solution', 'montage', 'setup -> payoff', or 'preserve narrative arc')\n\n\
-        Transcript:\n\
-        {}", segments_text
-    );
-
-    let raw_response = match provider {
-        "deepseek" => call_deepseek_raw(&prompt, api_key.unwrap_or_default()).await,
-        "claude" => call_claude_raw(&prompt, api_key.unwrap_or_default()).await,
-        "gemini" => call_gemini_raw(&prompt, api_key.unwrap_or_default()).await,
-        "openai" => call_openai_raw(&prompt, api_key.unwrap_or_default(), model_name).await,
-        "openrouter" => call_openrouter_raw(&prompt, api_key.unwrap_or_default(), model_name).await,
-        "ollama" => call_ollama_raw(&prompt, model_name).await,
-        _ => Ok("CONTENT TYPE: General\nRECOMMENDED STRATEGY: preserve narrative arc".to_string()),
-    };
-
-    raw_response.unwrap_or_else(|_| "CONTENT TYPE: General\nRECOMMENDED STRATEGY: preserve narrative arc".to_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,8 +126,7 @@ pub async fn detect_candidates_with_deepseek(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let analysis = analyze_story(&segments, Some(api_key), "deepseek", "deepseek-chat").await;
-    let prompt = build_prompt(&segments, &analysis);
+    let prompt = build_prompt(&segments);
 
     let response = get_client()
         .post("https://api.deepseek.com/chat/completions")
@@ -232,8 +190,7 @@ pub async fn detect_candidates_with_gemini(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let analysis = analyze_story(&segments, Some(api_key), "gemini", "gemini-2.5-flash").await;
-    let prompt = build_prompt(&segments, &analysis);
+    let prompt = build_prompt(&segments);
 
     let model = std::env::var("GEMINI_MODEL").unwrap_or_else(|_| "gemini-2.5-flash".to_string());
     let url = format!(
@@ -301,10 +258,7 @@ pub async fn detect_candidates_with_openai(
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
     let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-    let analysis = analyze_story(&segments, Some(api_key), "openai", &model).await;
-    let prompt = build_prompt(&segments, &analysis);
-
-
+    let prompt = build_prompt(&segments);
 
     let response = get_client()
         .post("https://api.openai.com/v1/chat/completions")
@@ -349,11 +303,9 @@ pub async fn detect_candidates_with_openrouter(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let model = std::env::var("OPENROUTER_MODEL").unwrap_or_else(|_| "google/gemini-2.5-flash".to_string());
-    let analysis = analyze_story(&segments, Some(api_key), "openrouter", &model).await;
-    let prompt = build_prompt(&segments, &analysis);
-
-
+    let model =
+        std::env::var("OPENROUTER_MODEL").unwrap_or_else(|_| "google/gemini-2.5-flash".to_string());
+    let prompt = build_prompt(&segments);
 
     let response = get_client()
         .post("https://openrouter.ai/api/v1/chat/completions")
@@ -406,8 +358,7 @@ pub async fn detect_candidates_with_claude(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let analysis = analyze_story(&segments, Some(api_key), "claude", "claude-3-5-sonnet-latest").await;
-    let prompt = build_prompt(&segments, &analysis);
+    let prompt = build_prompt(&segments);
 
     let model =
         std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "claude-3-5-sonnet-latest".to_string());
@@ -463,8 +414,7 @@ pub async fn detect_candidates_with_local_llm(
     model_name: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let analysis = analyze_story(&segments, None, "ollama", model_name).await;
-    let prompt = build_prompt(&segments, &analysis);
+    let prompt = build_prompt(&segments);
 
     let response = get_client()
         .post("http://localhost:11434/api/chat")
@@ -527,15 +477,11 @@ pub async fn detect_candidates_with_local_llm(
         .json()
         .await
         .context("parsing local Ollama response")?;
-        
+
     println!("RAW OLLAMA OUTPUT: {}", res_body.message.content);
-    
+
     // Make min_duration much more forgiving (10s minimum for normal videos, 5s for tiny videos)
-    let min_duration = if transcript.duration < 15.0 {
-        1.5
-    } else {
-        2.0
-    };
+    let min_duration = if transcript.duration < 15.0 { 1.5 } else { 2.0 };
     parse_candidate_json(&res_body.message.content, min_duration)
 }
 
@@ -594,9 +540,15 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
 
     let mut drafts = Vec::new();
     for item in &concrete_arr {
-        let title = item.get("title").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let description = item.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
-        
+        let title = item
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let description = item
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         let mut score = match item.get("score").or_else(|| item.get("viral_score")) {
             Some(v) => {
                 if let Some(f) = v.as_f64() {
@@ -635,11 +587,18 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
             .unwrap_or("")
             .to_string();
 
-        let editing_strategy = item.get("editing_strategy").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let editing_strategy = item
+            .get("editing_strategy")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         let confidence = item.get("confidence").and_then(|v| {
-            if let Some(f) = v.as_f64() { Some(f) }
-            else if let Some(s) = v.as_str() { s.parse::<f64>().ok() }
-            else { None }
+            if let Some(f) = v.as_f64() {
+                Some(f)
+            } else if let Some(s) = v.as_str() {
+                s.parse::<f64>().ok()
+            } else {
+                None
+            }
         });
 
         let mut segments = Vec::new();
@@ -647,17 +606,25 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
             for seg in segs {
                 let start = match seg.get("start").or_else(|| seg.get("start_timestamp")) {
                     Some(v) => {
-                        if let Some(f) = v.as_f64() { f }
-                        else if let Some(s) = v.as_str() { s.parse::<f64>().unwrap_or(0.0) }
-                        else { 0.0 }
+                        if let Some(f) = v.as_f64() {
+                            f
+                        } else if let Some(s) = v.as_str() {
+                            s.parse::<f64>().unwrap_or(0.0)
+                        } else {
+                            0.0
+                        }
                     }
                     None => 0.0,
                 };
                 let end = match seg.get("end").or_else(|| seg.get("end_timestamp")) {
                     Some(v) => {
-                        if let Some(f) = v.as_f64() { f }
-                        else if let Some(s) = v.as_str() { s.parse::<f64>().unwrap_or(0.0) }
-                        else { 0.0 }
+                        if let Some(f) = v.as_f64() {
+                            f
+                        } else if let Some(s) = v.as_str() {
+                            s.parse::<f64>().unwrap_or(0.0)
+                        } else {
+                            0.0
+                        }
                     }
                     None => 0.0,
                 };
@@ -666,22 +633,30 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
                 }
             }
         }
-        
+
         // Fallback: If AI put start/end directly on the candidate object instead of a segments array
         if segments.is_empty() {
             let start = match item.get("start").or_else(|| item.get("start_timestamp")) {
                 Some(v) => {
-                    if let Some(f) = v.as_f64() { f }
-                    else if let Some(s) = v.as_str() { s.parse::<f64>().unwrap_or(0.0) }
-                    else { 0.0 }
+                    if let Some(f) = v.as_f64() {
+                        f
+                    } else if let Some(s) = v.as_str() {
+                        s.parse::<f64>().unwrap_or(0.0)
+                    } else {
+                        0.0
+                    }
                 }
                 None => 0.0,
             };
             let end = match item.get("end").or_else(|| item.get("end_timestamp")) {
                 Some(v) => {
-                    if let Some(f) = v.as_f64() { f }
-                    else if let Some(s) = v.as_str() { s.parse::<f64>().unwrap_or(0.0) }
-                    else { 0.0 }
+                    if let Some(f) = v.as_f64() {
+                        f
+                    } else if let Some(s) = v.as_str() {
+                        s.parse::<f64>().unwrap_or(0.0)
+                    } else {
+                        0.0
+                    }
                 }
                 None => 0.0,
             };
@@ -696,8 +671,8 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
                 score,
                 hook,
                 rationale,
-                title: None,
-                description: None,
+                title,
+                description,
                 editing_strategy,
                 confidence,
             });
@@ -708,7 +683,10 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
         .into_iter()
         .filter(|candidate| {
             let duration: f64 = candidate.segments.iter().map(|s| s.end - s.start).sum();
-            println!("Candidate duration: {}, min_duration: {}", duration, min_duration);
+            println!(
+                "Candidate duration: {}, min_duration: {}",
+                duration, min_duration
+            );
             duration >= min_duration
         })
         .collect::<Vec<_>>();
@@ -779,7 +757,12 @@ pub async fn fix_spelling(
             }
             "openrouter" => {
                 let key = api_key.ok_or_else(|| anyhow!("OpenRouter API key required"))?;
-                call_openrouter_raw(&prompt, key, model_name.unwrap_or("meta-llama/llama-3.1-8b-instruct:free")).await?
+                call_openrouter_raw(
+                    &prompt,
+                    key,
+                    model_name.unwrap_or("meta-llama/llama-3.1-8b-instruct:free"),
+                )
+                .await?
             }
             "local" => {
                 let model = model_name.unwrap_or("qwen2.5");
@@ -821,8 +804,15 @@ async fn call_deepseek_raw(prompt: &str, api_key: &str) -> Result<String> {
         .send()
         .await
         .context("calling DeepSeek for spelling fix")?;
-    let body: DeepseekResponse = response.json().await.context("parsing DeepSeek spelling response")?;
-    Ok(body.choices.first().map(|c| c.message.content.clone()).unwrap_or_default())
+    let body: DeepseekResponse = response
+        .json()
+        .await
+        .context("parsing DeepSeek spelling response")?;
+    Ok(body
+        .choices
+        .first()
+        .map(|c| c.message.content.clone())
+        .unwrap_or_default())
 }
 
 async fn call_claude_raw(prompt: &str, api_key: &str) -> Result<String> {
@@ -838,19 +828,34 @@ async fn call_claude_raw(prompt: &str, api_key: &str) -> Result<String> {
         .send()
         .await
         .context("calling Claude for spelling fix")?;
-    let body: AnthropicMessage = response.json().await.context("parsing Claude spelling response")?;
-    Ok(body.content.into_iter().find_map(|c| c.text).unwrap_or_default())
+    let body: AnthropicMessage = response
+        .json()
+        .await
+        .context("parsing Claude spelling response")?;
+    Ok(body
+        .content
+        .into_iter()
+        .find_map(|c| c.text)
+        .unwrap_or_default())
 }
 
 async fn call_gemini_raw(prompt: &str, api_key: &str) -> Result<String> {
     #[derive(Deserialize)]
-    struct GeminiPart { text: Option<String> }
+    struct GeminiPart {
+        text: Option<String>,
+    }
     #[derive(Deserialize)]
-    struct GeminiContent { parts: Vec<GeminiPart> }
+    struct GeminiContent {
+        parts: Vec<GeminiPart>,
+    }
     #[derive(Deserialize)]
-    struct GeminiCandidate { content: GeminiContent }
+    struct GeminiCandidate {
+        content: GeminiContent,
+    }
     #[derive(Deserialize)]
-    struct GeminiResponse { candidates: Vec<GeminiCandidate> }
+    struct GeminiResponse {
+        candidates: Vec<GeminiCandidate>,
+    }
 
     let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}");
     let response = get_client()
@@ -862,8 +867,13 @@ async fn call_gemini_raw(prompt: &str, api_key: &str) -> Result<String> {
         .send()
         .await
         .context("calling Gemini for spelling fix")?;
-    let body: GeminiResponse = response.json().await.context("parsing Gemini spelling response")?;
-    Ok(body.candidates.first()
+    let body: GeminiResponse = response
+        .json()
+        .await
+        .context("parsing Gemini spelling response")?;
+    Ok(body
+        .candidates
+        .first()
         .and_then(|c| c.content.parts.first())
         .and_then(|p| p.text.clone())
         .unwrap_or_default())
@@ -881,8 +891,15 @@ async fn call_openai_raw(prompt: &str, api_key: &str, model: &str) -> Result<Str
         .send()
         .await
         .context("calling OpenAI for spelling fix")?;
-    let body: DeepseekResponse = response.json().await.context("parsing OpenAI spelling response")?;
-    Ok(body.choices.first().map(|c| c.message.content.clone()).unwrap_or_default())
+    let body: DeepseekResponse = response
+        .json()
+        .await
+        .context("parsing OpenAI spelling response")?;
+    Ok(body
+        .choices
+        .first()
+        .map(|c| c.message.content.clone())
+        .unwrap_or_default())
 }
 
 async fn call_openrouter_raw(prompt: &str, api_key: &str, model: &str) -> Result<String> {
@@ -897,8 +914,15 @@ async fn call_openrouter_raw(prompt: &str, api_key: &str, model: &str) -> Result
         .send()
         .await
         .context("calling OpenRouter for spelling fix")?;
-    let body: DeepseekResponse = response.json().await.context("parsing OpenRouter spelling response")?;
-    Ok(body.choices.first().map(|c| c.message.content.clone()).unwrap_or_default())
+    let body: DeepseekResponse = response
+        .json()
+        .await
+        .context("parsing OpenRouter spelling response")?;
+    Ok(body
+        .choices
+        .first()
+        .map(|c| c.message.content.clone())
+        .unwrap_or_default())
 }
 
 async fn call_ollama_raw(prompt: &str, model: &str) -> Result<String> {
@@ -913,7 +937,10 @@ async fn call_ollama_raw(prompt: &str, model: &str) -> Result<String> {
         .send()
         .await
         .context("calling Ollama for spelling fix")?;
-    let body: OllamaResponse = response.json().await.context("parsing Ollama spelling response")?;
+    let body: OllamaResponse = response
+        .json()
+        .await
+        .context("parsing Ollama spelling response")?;
     Ok(body.message.content)
 }
 
@@ -971,7 +998,7 @@ pub async fn generate_candidate_metadata(
 
 fn build_review_prompt(candidate_text: &str) -> String {
     format!(
-r#"You are an expert YouTube Shorts, Instagram Reels, and TikTok content reviewer.
+        r#"You are an expert YouTube Shorts, Instagram Reels, and TikTok content reviewer.
 
 Your job is NOT to create clips.
 Your job is to critically review clips generated by another AI.
@@ -1041,34 +1068,81 @@ Transcript to review:
 }
 
 fn parse_review_json(json_str: &str, candidate_id: &str) -> Result<crate::models::CandidateReview> {
-    let root: serde_json::Value = serde_json::from_str(json_str)
-        .context("Failed to parse LLM output as JSON")?;
+    let root: serde_json::Value =
+        serde_json::from_str(json_str).context("Failed to parse LLM output as JSON")?;
 
-    let decision = root.get("decision").and_then(|v| v.as_str()).unwrap_or("REVISION_REQUIRED").to_string();
-    
-    let scores_obj = root.get("scores").ok_or_else(|| anyhow!("Missing 'scores' object"))?;
-    let overall_score = scores_obj.get("Overall_Score").and_then(|v| v.as_i64()).unwrap_or(0);
-    let confidence = scores_obj.get("Confidence").and_then(|v| v.as_i64()).unwrap_or(0);
+    let decision = root
+        .get("decision")
+        .and_then(|v| v.as_str())
+        .unwrap_or("REVISION_REQUIRED")
+        .to_string();
+
+    let scores_obj = root
+        .get("scores")
+        .ok_or_else(|| anyhow!("Missing 'scores' object"))?;
+    let overall_score = scores_obj
+        .get("Overall_Score")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let confidence = scores_obj
+        .get("Confidence")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
 
     let scores = crate::models::ReviewScores {
-        story_completeness: scores_obj.get("Story_Completeness").and_then(|v| v.as_i64()).unwrap_or(0),
-        hook_strength: scores_obj.get("Hook_Strength").and_then(|v| v.as_i64()).unwrap_or(0),
-        context: scores_obj.get("Context").and_then(|v| v.as_i64()).unwrap_or(0),
+        story_completeness: scores_obj
+            .get("Story_Completeness")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        hook_strength: scores_obj
+            .get("Hook_Strength")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        context: scores_obj
+            .get("Context")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
         flow: scores_obj.get("Flow").and_then(|v| v.as_i64()).unwrap_or(0),
-        segment_selection: scores_obj.get("Segment_Selection").and_then(|v| v.as_i64()).unwrap_or(0),
-        pacing: scores_obj.get("Pacing").and_then(|v| v.as_i64()).unwrap_or(0),
-        ending: scores_obj.get("Ending").and_then(|v| v.as_i64()).unwrap_or(0),
-        caption_quality: scores_obj.get("Caption_Quality").and_then(|v| v.as_i64()).unwrap_or(0),
-        viral_potential: scores_obj.get("Viral_Potential").and_then(|v| v.as_i64()).unwrap_or(0),
-        viewer_retention: scores_obj.get("Viewer_Retention").and_then(|v| v.as_i64()).unwrap_or(0),
+        segment_selection: scores_obj
+            .get("Segment_Selection")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        pacing: scores_obj
+            .get("Pacing")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        ending: scores_obj
+            .get("Ending")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        caption_quality: scores_obj
+            .get("Caption_Quality")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        viral_potential: scores_obj
+            .get("Viral_Potential")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
+        viewer_retention: scores_obj
+            .get("Viewer_Retention")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
     };
 
     let mut flaws = Vec::new();
     if let Some(flaws_arr) = root.get("flaws").and_then(|v| v.as_array()) {
         for flaw in flaws_arr {
             flaws.push(crate::models::ReviewFlaw {
-                issue: flaw.get("issue").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                improvement: flaw.get("improvement").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                issue: flaw
+                    .get("issue")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                improvement: flaw
+                    .get("improvement")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             });
         }
     }
@@ -1119,7 +1193,7 @@ pub async fn review_candidate(
 
 fn build_prediction_prompt(candidate_text: &str) -> String {
     format!(
-r##"You are a world-class YouTube Shorts, Instagram Reels, and TikTok growth strategist.
+        r##"You are a world-class YouTube Shorts, Instagram Reels, and TikTok growth strategist.
 
 Your job is NOT to edit the clip.
 Your job is to predict how this clip is likely to perform with real viewers.
@@ -1185,20 +1259,57 @@ Transcript to evaluate:
     )
 }
 
-fn parse_prediction_json(json_str: &str, candidate_id: &str) -> Result<crate::models::ViralPrediction> {
-    let root: serde_json::Value = serde_json::from_str(json_str)
-        .context("Failed to parse LLM output as JSON")?;
+fn parse_prediction_json(
+    json_str: &str,
+    candidate_id: &str,
+) -> Result<crate::models::ViralPrediction> {
+    let root: serde_json::Value =
+        serde_json::from_str(json_str).context("Failed to parse LLM output as JSON")?;
 
-    let evaluation_summary = root.get("evaluation_summary").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    
-    let preds = root.get("predictions").ok_or_else(|| anyhow!("Missing 'predictions' object"))?;
-    let avg_watch_percentage = preds.get("avg_watch_percentage").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let watch_to_end_likelihood = preds.get("watch_to_end_likelihood").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let best_target_audience = preds.get("best_target_audience").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let best_platform = preds.get("best_platform").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let best_posting_time = preds.get("best_posting_time").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let best_title = preds.get("best_title").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let best_thumbnail_text = preds.get("best_thumbnail_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let evaluation_summary = root
+        .get("evaluation_summary")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let preds = root
+        .get("predictions")
+        .ok_or_else(|| anyhow!("Missing 'predictions' object"))?;
+    let avg_watch_percentage = preds
+        .get("avg_watch_percentage")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let watch_to_end_likelihood = preds
+        .get("watch_to_end_likelihood")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let best_target_audience = preds
+        .get("best_target_audience")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let best_platform = preds
+        .get("best_platform")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let best_posting_time = preds
+        .get("best_posting_time")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let best_title = preds
+        .get("best_title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let best_thumbnail_text = preds
+        .get("best_thumbnail_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let mut best_hashtags = Vec::new();
     if let Some(tags) = preds.get("best_hashtags").and_then(|v| v.as_array()) {
         for t in tags {
@@ -1208,14 +1319,36 @@ fn parse_prediction_json(json_str: &str, candidate_id: &str) -> Result<crate::mo
         }
     }
 
-    let expls = root.get("explanations").ok_or_else(|| anyhow!("Missing 'explanations' object"))?;
-    let viral_reason = expls.get("viral_reason").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let failure_reason = expls.get("failure_reason").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let single_improvement = expls.get("single_improvement").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let expls = root
+        .get("explanations")
+        .ok_or_else(|| anyhow!("Missing 'explanations' object"))?;
+    let viral_reason = expls
+        .get("viral_reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let failure_reason = expls
+        .get("failure_reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let single_improvement = expls
+        .get("single_improvement")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
 
-    let scores = root.get("scores").ok_or_else(|| anyhow!("Missing 'scores' object"))?;
-    let viral_probability = scores.get("viral_probability").and_then(|v| v.as_i64()).unwrap_or(0);
-    let confidence = scores.get("confidence").and_then(|v| v.as_i64()).unwrap_or(0);
+    let scores = root
+        .get("scores")
+        .ok_or_else(|| anyhow!("Missing 'scores' object"))?;
+    let viral_probability = scores
+        .get("viral_probability")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let confidence = scores
+        .get("confidence")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
 
     Ok(crate::models::ViralPrediction {
         id: uuid::Uuid::new_v4().to_string(),

@@ -100,8 +100,14 @@ impl Database {
         let _ = conn.execute("ALTER TABLE projects ADD COLUMN caption_style TEXT", []);
         let _ = conn.execute("ALTER TABLE candidates ADD COLUMN title TEXT", []);
         let _ = conn.execute("ALTER TABLE candidates ADD COLUMN description TEXT", []);
-        let _ = conn.execute("ALTER TABLE candidates ADD COLUMN segments TEXT DEFAULT '[]'", []);
-        let _ = conn.execute("ALTER TABLE candidates ADD COLUMN editing_strategy TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE candidates ADD COLUMN segments TEXT DEFAULT '[]'",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE candidates ADD COLUMN editing_strategy TEXT",
+            [],
+        );
         let _ = conn.execute("ALTER TABLE candidates ADD COLUMN confidence REAL", []);
         Ok(())
     }
@@ -263,13 +269,14 @@ impl Database {
         drafts: &[CandidateDraft],
     ) -> Result<Vec<Candidate>> {
         let conn = self.conn.lock().expect("database mutex poisoned");
-        
-        let max_rank: i64 = conn.query_row(
-            "SELECT COALESCE(MAX(rank), 0) FROM candidates WHERE project_id = ?1",
-            params![project_id],
-            |row| row.get(0),
-        ).unwrap_or(0);
 
+        let max_rank: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(rank), 0) FROM candidates WHERE project_id = ?1",
+                params![project_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         let selected_cutoff = drafts.len().min(6).max(3).min(drafts.len());
         let mut candidates = Vec::with_capacity(drafts.len());
@@ -285,13 +292,15 @@ impl Database {
                 rank: max_rank + (index as i64) + 1,
                 selected: index < selected_cutoff,
                 title: draft.title.clone(),
-                description: draft.description.clone(), 
+                description: draft.description.clone(),
                 editing_strategy: draft.editing_strategy.clone(),
                 confidence: draft.confidence,
-                review: None, prediction: None,
+                review: None,
+                prediction: None,
             };
 
-            let segments_json = serde_json::to_string(&candidate.segments).unwrap_or_else(|_| "[]".to_string());
+            let segments_json =
+                serde_json::to_string(&candidate.segments).unwrap_or_else(|_| "[]".to_string());
 
             conn.execute(
                 "INSERT INTO candidates (id, project_id, segments, score, hook, rationale, rank, selected, title, description, start_sec, end_sec, editing_strategy, confidence)
@@ -343,20 +352,25 @@ impl Database {
         let candidate = Candidate {
             id: Uuid::new_v4().to_string(),
             project_id: project_id.to_string(),
-            segments: vec![crate::models::SegmentRange { start: start_sec, end: end_sec }],
+            segments: vec![crate::models::SegmentRange {
+                start: start_sec,
+                end: end_sec,
+            }],
             score: 1.0, // perfect score for user's manual clip
             hook: "Custom Manual Clip".to_string(),
             rationale: "Manually added by user.".to_string(),
             rank: max_rank + 1,
             selected: true,
             title: None,
-            description: None, 
+            description: None,
             editing_strategy: None,
             confidence: None,
-            review: None, prediction: None,
+            review: None,
+            prediction: None,
         };
 
-        let segments_json = serde_json::to_string(&candidate.segments).unwrap_or_else(|_| "[]".to_string());
+        let segments_json =
+            serde_json::to_string(&candidate.segments).unwrap_or_else(|_| "[]".to_string());
 
         conn.execute(
             "INSERT INTO candidates (id, project_id, segments, score, hook, rationale, rank, selected, title, description, start_sec, end_sec, editing_strategy, confidence)
@@ -461,7 +475,13 @@ impl Database {
                  caption_ass_path = COALESCE(?3, caption_ass_path),
                  render_log = COALESCE(?4, render_log)
              WHERE candidate_id = ?5",
-            params![status, output_path, caption_ass_path, render_log, candidate_id],
+            params![
+                status,
+                output_path,
+                caption_ass_path,
+                render_log,
+                candidate_id
+            ],
         )?;
         Ok(())
     }
@@ -558,11 +578,15 @@ impl Database {
     }
 
     pub fn save_candidate_review(&self, review: &crate::models::CandidateReview) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("DB lock poisoned: {}", e))?;
-        
-        let scores_json = serde_json::to_string(&review.scores).unwrap_or_else(|_| "{}".to_string());
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("DB lock poisoned: {}", e))?;
+
+        let scores_json =
+            serde_json::to_string(&review.scores).unwrap_or_else(|_| "{}".to_string());
         let flaws_json = serde_json::to_string(&review.flaws).unwrap_or_else(|_| "[]".to_string());
-        
+
         conn.execute(
             "INSERT INTO candidate_reviews (id, candidate_id, decision, overall_score, confidence, scores_json, flaws_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -585,20 +609,22 @@ impl Database {
         Ok(())
     }
 
-    pub fn save_candidate_prediction(&self, prediction: &crate::models::ViralPrediction) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("DB lock poisoned: {}", e))?;
+    pub fn save_candidate_prediction(
+        &self,
+        prediction: &crate::models::ViralPrediction,
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("DB lock poisoned: {}", e))?;
         let data_json = serde_json::to_string(prediction).unwrap_or_else(|_| "{}".to_string());
-        
+
         conn.execute(
             "INSERT INTO candidate_predictions (id, candidate_id, data_json)
              VALUES (?1, ?2, ?3)
              ON CONFLICT(candidate_id) DO UPDATE SET
                 data_json = excluded.data_json",
-            rusqlite::params![
-                &prediction.id,
-                &prediction.candidate_id,
-                data_json
-            ],
+            rusqlite::params![&prediction.id, &prediction.candidate_id, data_json],
         )?;
         Ok(())
     }
@@ -618,16 +644,17 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
     })
 }
 
-
 fn candidate_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Candidate> {
     let selected: i64 = row.get(7)?;
     let segments_str: String = row.get(2)?;
     let segments = serde_json::from_str(&segments_str).unwrap_or_default();
-    
+
     // Review parsing
     let review_id: Option<String> = row.get("review_id").unwrap_or_default();
     let review = if let Some(id) = review_id {
-        let scores_json: String = row.get("review_scores").unwrap_or_else(|_| "{}".to_string());
+        let scores_json: String = row
+            .get("review_scores")
+            .unwrap_or_else(|_| "{}".to_string());
         let flaws_json: String = row.get("review_flaws").unwrap_or_else(|_| "[]".to_string());
         Some(crate::models::CandidateReview {
             id,
@@ -636,7 +663,16 @@ fn candidate_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Candidate> {
             overall_score: row.get("review_overall_score").unwrap_or(0),
             confidence: row.get("review_confidence").unwrap_or(0),
             scores: serde_json::from_str(&scores_json).unwrap_or(crate::models::ReviewScores {
-                story_completeness: 0, hook_strength: 0, context: 0, flow: 0, segment_selection: 0, pacing: 0, ending: 0, caption_quality: 0, viral_potential: 0, viewer_retention: 0
+                story_completeness: 0,
+                hook_strength: 0,
+                context: 0,
+                flow: 0,
+                segment_selection: 0,
+                pacing: 0,
+                ending: 0,
+                caption_quality: 0,
+                viral_potential: 0,
+                viewer_retention: 0,
             }),
             flaws: serde_json::from_str(&flaws_json).unwrap_or_default(),
         })
@@ -647,7 +683,9 @@ fn candidate_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Candidate> {
     // Prediction parsing
     let pred_id: Option<String> = row.get("pred_id").unwrap_or_default();
     let prediction = if pred_id.is_some() {
-        let data_json: String = row.get("pred_data_json").unwrap_or_else(|_| "{}".to_string());
+        let data_json: String = row
+            .get("pred_data_json")
+            .unwrap_or_else(|_| "{}".to_string());
         serde_json::from_str(&data_json).ok()
     } else {
         None

@@ -1,4 +1,3 @@
-
 fn get_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
@@ -162,16 +161,19 @@ pub fn whisper_python_exists() -> bool {
 }
 
 fn normalize_whisper_raw_json(raw: serde_json::Value) -> Result<NormalizedTranscript> {
-    let language = raw.get("language")
+    let language = raw
+        .get("language")
         .and_then(|v| v.as_str())
         .unwrap_or("en")
         .to_string();
 
-    let segments_arr = raw.get("segments")
+    let segments_arr = raw
+        .get("segments")
         .and_then(|v| v.as_array())
         .ok_or_else(|| anyhow!("Missing 'segments' in Whisper JSON"))?;
 
-    let duration = segments_arr.last()
+    let duration = segments_arr
+        .last()
         .and_then(|s| s.get("end").and_then(|e| e.as_f64()))
         .unwrap_or(0.0);
 
@@ -181,7 +183,12 @@ fn normalize_whisper_raw_json(raw: serde_json::Value) -> Result<NormalizedTransc
     for seg in segments_arr {
         let start = seg.get("start").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let end = seg.get("end").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let text = seg.get("text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+        let text = seg
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
 
         segments.push(TranscriptSegment {
             start,
@@ -192,7 +199,12 @@ fn normalize_whisper_raw_json(raw: serde_json::Value) -> Result<NormalizedTransc
 
         if let Some(words_arr) = seg.get("words").and_then(|v| v.as_array()) {
             for w in words_arr {
-                let word_text = w.get("word").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let word_text = w
+                    .get("word")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
                 let word_start = w.get("start").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let word_end = w.get("end").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
@@ -226,9 +238,14 @@ pub async fn transcribe_local_with_progress(
 
     if whisper_cli_exists() {
         let audio_path_buf = std::path::Path::new(&audio_path);
-        let audio_dir = audio_path_buf.parent().ok_or_else(|| anyhow!("Invalid audio path parent"))?;
-        let audio_stem = audio_path_buf.file_stem().ok_or_else(|| anyhow!("Invalid audio file stem"))?.to_string_lossy();
-        
+        let audio_dir = audio_path_buf
+            .parent()
+            .ok_or_else(|| anyhow!("Invalid audio path parent"))?;
+        let audio_stem = audio_path_buf
+            .file_stem()
+            .ok_or_else(|| anyhow!("Invalid audio file stem"))?
+            .to_string_lossy();
+
         let output_json_path = audio_dir.join(format!("{}.json", audio_stem));
         let output_json_path_str = output_json_path.to_string_lossy().to_string();
         let audio_dir_str = audio_dir.to_string_lossy().to_string();
@@ -281,20 +298,28 @@ pub async fn transcribe_local_with_progress(
                 }
             }
 
-            let output = child.wait_with_output().context("waiting for whisper CLI")?;
+            let output = child
+                .wait_with_output()
+                .context("waiting for whisper CLI")?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                return Err(anyhow!("Whisper CLI failed:\nStderr: {}\nStdout: {}", stderr, stdout));
+                return Err(anyhow!(
+                    "Whisper CLI failed:\nStderr: {}\nStdout: {}",
+                    stderr,
+                    stdout
+                ));
             }
 
-            let json_bytes = std::fs::read(&output_json_path_str).context("reading output transcript JSON from CLI")?;
-            let raw_json: serde_json::Value = serde_json::from_slice(&json_bytes).context("parsing output transcript JSON")?;
-            
+            let json_bytes = std::fs::read(&output_json_path_str)
+                .context("reading output transcript JSON from CLI")?;
+            let raw_json: serde_json::Value =
+                serde_json::from_slice(&json_bytes).context("parsing output transcript JSON")?;
+
             // Clean up the output JSON file
             let _ = std::fs::remove_file(&output_json_path_str);
-            
+
             // Clean up any extra formats whisper CLI might have written (it sometimes generates them by default)
             for ext in &["txt", "srt", "vtt", "tsv"] {
                 let extra_file = audio_dir_clone.join(format!("{}.{}", audio_stem_clone, ext));
@@ -312,7 +337,7 @@ pub async fn transcribe_local_with_progress(
         let model_dir = std::path::Path::new(&model_path)
             .parent()
             .ok_or_else(|| anyhow!("Invalid model path"))?;
-        
+
         let script_path = model_dir.join("transcribe.py");
         // Always rewrite to ensure we have the latest pipeline
         let script_content = r#"import sys
@@ -561,7 +586,8 @@ if __name__ == "__main__":
 "#;
         std::fs::write(&script_path, script_content).context("writing transcribe.py script")?;
 
-        let output_json_path = model_dir.join(format!("temp_transcript_{}.json", uuid::Uuid::new_v4()));
+        let output_json_path =
+            model_dir.join(format!("temp_transcript_{}.json", uuid::Uuid::new_v4()));
         let script_path_str = script_path.to_string_lossy().to_string();
         let output_json_path_str = output_json_path.to_string_lossy().to_string();
 
@@ -574,7 +600,7 @@ if __name__ == "__main__":
                 "../venv/bin/python3",
                 "/opt/homebrew/lib/python3.12/autoshorts-venv/bin/python3.12", // legacy fallback
             ];
-            
+
             let mut python_cmd = "python3".to_string(); // fallback to system python
             for venv_path in possible_venvs {
                 if std::path::Path::new(venv_path).exists() {
@@ -626,17 +652,25 @@ if __name__ == "__main__":
                 }
             }
 
-            let output = child.wait_with_output().context("waiting for python script")?;
+            let output = child
+                .wait_with_output()
+                .context("waiting for python script")?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                return Err(anyhow!("Python transcription script failed:\nStderr: {}\nStdout: {}", stderr, stdout));
+                return Err(anyhow!(
+                    "Python transcription script failed:\nStderr: {}\nStdout: {}",
+                    stderr,
+                    stdout
+                ));
             }
 
-            let json_bytes = std::fs::read(&output_json_path_str).context("reading output transcript JSON")?;
-            let transcript: NormalizedTranscript = serde_json::from_slice(&json_bytes).context("parsing output transcript JSON")?;
-            
+            let json_bytes =
+                std::fs::read(&output_json_path_str).context("reading output transcript JSON")?;
+            let transcript: NormalizedTranscript =
+                serde_json::from_slice(&json_bytes).context("parsing output transcript JSON")?;
+
             // Cleanup temp file
             let _ = std::fs::remove_file(&output_json_path_str);
 
@@ -650,25 +684,25 @@ pub fn parse_vtt(content: &str) -> Result<NormalizedTranscript> {
     let mut segments: Vec<crate::models::TranscriptSegment> = Vec::new();
     let mut words = Vec::new();
     let mut duration = 0.0;
-    
+
     for block in content.split("\n\n") {
         let lines: Vec<&str> = block.lines().collect();
         if lines.is_empty() {
             continue;
         }
-        
+
         let mut text_lines = Vec::new();
         let mut start_sec = 0.0;
         let mut end_sec = 0.0;
         let mut found_ts = false;
-        
+
         for line in lines {
             if line.contains("-->") {
                 let parts: Vec<&str> = line.split("-->").collect();
                 if parts.len() == 2 {
                     start_sec = parse_vtt_timestamp(parts[0].trim());
                     // Support VTT style .mss and SRT style ,mss
-                    let end_str = parts[1].split_whitespace().next().unwrap_or(parts[1]); 
+                    let end_str = parts[1].split_whitespace().next().unwrap_or(parts[1]);
                     end_sec = parse_vtt_timestamp(end_str.trim());
                     found_ts = true;
                 }
@@ -676,10 +710,10 @@ pub fn parse_vtt(content: &str) -> Result<NormalizedTranscript> {
                 text_lines.push(line.trim());
             }
         }
-        
+
         if found_ts && !text_lines.is_empty() {
             let raw_text = text_lines.join(" ").replace("\n", " ");
-            
+
             // Strip HTML/VTT tags like <c.colorA0AAB4>, <b>, and <00:00:00.444>
             let mut text = String::with_capacity(raw_text.len());
             let mut in_tag = false;
@@ -693,8 +727,10 @@ pub fn parse_vtt(content: &str) -> Result<NormalizedTranscript> {
                 }
             }
             let text = text.trim().to_string();
-            
-            if text.is_empty() { continue; }
+
+            if text.is_empty() {
+                continue;
+            }
 
             // Deduplicate consecutive identical segments
             if let Some(last) = segments.last_mut() {
@@ -719,14 +755,14 @@ pub fn parse_vtt(content: &str) -> Result<NormalizedTranscript> {
             }
         }
     }
-    
+
     // Generate words array from deduplicated segments
     for seg in &segments {
         let raw_words: Vec<&str> = seg.text.split_whitespace().collect();
         if !raw_words.is_empty() {
             let dur = seg.end - seg.start;
             let time_per_word = dur / (raw_words.len() as f64);
-            
+
             for (i, w) in raw_words.iter().enumerate() {
                 let w_start = seg.start + (i as f64 * time_per_word);
                 let w_end = seg.start + ((i + 1) as f64 * time_per_word);
@@ -739,7 +775,7 @@ pub fn parse_vtt(content: &str) -> Result<NormalizedTranscript> {
             }
         }
     }
-    
+
     Ok(NormalizedTranscript {
         language: "en".to_string(),
         duration,
@@ -753,15 +789,25 @@ fn parse_vtt_timestamp(ts: &str) -> f64 {
     let clean_ts = ts.replace(',', ".");
     let parts: Vec<&str> = clean_ts.split(':').collect();
     let mut seconds = 0.0;
-    
+
     if parts.len() == 3 {
-        if let Ok(h) = parts[0].parse::<f64>() { seconds += h * 3600.0; }
-        if let Ok(m) = parts[1].parse::<f64>() { seconds += m * 60.0; }
-        if let Ok(s) = parts[2].parse::<f64>() { seconds += s; }
+        if let Ok(h) = parts[0].parse::<f64>() {
+            seconds += h * 3600.0;
+        }
+        if let Ok(m) = parts[1].parse::<f64>() {
+            seconds += m * 60.0;
+        }
+        if let Ok(s) = parts[2].parse::<f64>() {
+            seconds += s;
+        }
     } else if parts.len() == 2 {
-        if let Ok(m) = parts[0].parse::<f64>() { seconds += m * 60.0; }
-        if let Ok(s) = parts[1].parse::<f64>() { seconds += s; }
+        if let Ok(m) = parts[0].parse::<f64>() {
+            seconds += m * 60.0;
+        }
+        if let Ok(s) = parts[1].parse::<f64>() {
+            seconds += s;
+        }
     }
-    
+
     seconds
 }

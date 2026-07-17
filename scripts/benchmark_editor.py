@@ -8,8 +8,8 @@ from datetime import datetime
 import hashlib
 import statistics
 
-# Benchmark Script for AutoShorts AI Editing Intelligence (Phase 4)
-# Regression Testing, Mode Comparison, and Multi-metric Evaluation.
+# Benchmark Script for AutoShorts AI Editing Intelligence (Phase 4.5)
+# Regression Testing and Single Pass Evaluation.
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "qwen2.5" 
@@ -41,16 +41,6 @@ DATASET = [
     }
 ]
 
-ANALYSIS_PROMPT_TEMPLATE = """You are an expert story analyzer for short-form video.
-Analyze the following transcript.
-Output exactly 3 parts:
-1. CONTENT TYPE:
-2. EMOTIONAL PEAKS:
-3. RECOMMENDED STRATEGY:
-
-Transcript:
-{transcript}"""
-
 PROMPT_TEMPLATE = """You are an expert short-form video editor for YouTube Shorts, Instagram Reels, and TikTok.
 Your goal is to create the most engaging, complete, and natural story possible. You are NOT a timestamp finder; you are creating a brand new edit. The transcript represents raw footage.
 
@@ -62,8 +52,7 @@ EDITOR PHILOSOPHY & PRINCIPLES
 - The AI should NEVER assume that one continuous clip is best. You may trim, remove, merge, stitch, compress, shorten, and combine multiple transcript regions to produce the strongest possible story.
 - There is no preferred editing style. Only viewer retention matters.
 - A clip MUST be at least 30 seconds long.
-
-{analyzer_section}
+- A complete story with a slightly lower viral potential is ALWAYS better than an incomplete story with a higher viral score.
 
 ==================================================
 EDITING STYLES & DIVERSITY
@@ -75,20 +64,33 @@ Choose the structure that maximizes retention. Possible editing styles include:
 - before -> after
 - problem -> solution
 - setup -> payoff
+- question -> answer
+- challenge -> resolution
+- explanation -> demonstration
 
-Candidate Diversity: Do not generate near-duplicate candidates. Each candidate should represent a genuinely different editing strategy whenever appropriate.
+Candidate Diversity: Do not generate near-duplicate candidates. Each candidate should represent a genuinely different editing strategy whenever appropriate (e.g., Story-focused vs. High-retention fast pacing vs. Educational clarity).
 
 ==================================================
 STITCHING RULES & PACE OPTIMIZATION
 ==================================================
 - Feel free to take 12 seconds from minute 2, combine with 18 seconds from minute 7, and 15 seconds from minute 14 if together they produce the strongest story.
-- Never destroy chronology unless explicitly supported by the source material. Never create narratives or fabricate meaning.
+- Never destroy chronology unless explicitly supported by the source material. Never create misleading narratives or fabricate meaning.
+- Constantly ask: "Would the average Shorts viewer swipe away here?" If yes: remove, compress, or jump forward.
 - CRITICAL: To make a clip long enough, you MUST combine multiple consecutive transcript lines into a single segment. Use the start time of the FIRST line and the end time of the LAST line to form a long segment. Do NOT just copy a single 2-second line.
 
 ==================================================
 INTERNAL MULTI-PASS REASONING
 ==================================================
 Perform the following reasoning internally before producing your answer. Do NOT reveal your reasoning. Return ONLY the required JSON.
+- Pass 1: Understand transcript
+- Pass 2: Identify content type (e.g., Storytelling, Tutorial, Comedy)
+- Pass 3: Identify emotional peaks and hooks
+- Pass 4: Group related moments
+- Pass 5: Choose editing strategy (e.g., problem -> solution, montage)
+- Pass 6: Construct complete story
+- Pass 7: Optimize pacing
+- Pass 8: Merge nearby segments
+- Pass 9: Validate final edit
 
 ==================================================
 OPTIONAL METADATA
@@ -141,8 +143,8 @@ def run_ollama(prompt, schema=None):
         completion_tokens = result.get('eval_count', 0)
         return content, prompt_tokens, completion_tokens
 
-def evaluate_mode(mode_name, use_analyzer):
-    print(f"\\nEvaluating {mode_name}...")
+def evaluate_mode():
+    print(f"\nEvaluating Single Pass Mode...")
     schema = {
         "type": "object",
         "properties": {
@@ -198,16 +200,7 @@ def evaluate_mode(mode_name, use_analyzer):
         start_time = time.time()
         try:
             prompt_tokens, completion_tokens = 0, 0
-            analyzer_section = ""
-            
-            if use_analyzer:
-                analysis_prompt = ANALYSIS_PROMPT_TEMPLATE.replace("{transcript}", item["transcript"])
-                analysis_result, p_tok, c_tok = run_ollama(analysis_prompt)
-                prompt_tokens += p_tok
-                completion_tokens += c_tok
-                analyzer_section = f"==================================================\\nSTORY ANALYZER & CONTENT CLASSIFICATION\\n==================================================\\nThe following analysis has been performed on the transcript:\\n{analysis_result}\\n\\nAdapt your editing strategy automatically based on this analysis."
-            
-            prompt = PROMPT_TEMPLATE.replace("{analyzer_section}", analyzer_section).replace("{transcript}", item["transcript"])
+            prompt = PROMPT_TEMPLATE.replace("{transcript}", item["transcript"])
             
             content, p_tok, c_tok = run_ollama(prompt, schema)
             prompt_tokens += p_tok
@@ -229,7 +222,6 @@ def evaluate_mode(mode_name, use_analyzer):
                         scores.append(c["score"])
                     
                     metrics['csv_data'].append({
-                        "mode": mode_name,
                         "video_id": item["id"],
                         "category": item["category"],
                         "candidate_index": idx,
@@ -254,36 +246,33 @@ def evaluate_mode(mode_name, use_analyzer):
     return metrics
 
 def run_benchmark():
-    print(f"Starting Phase 4 Regression Framework...")
+    print(f"Starting Phase 4.5 Regression Framework...")
     prompt_version = generate_prompt_version()
     
-    # Run Mode A (No Analyzer)
-    metrics_a = evaluate_mode("Mode A (Internal Reasoning)", use_analyzer=False)
-    
-    # Run Mode B (With Analyzer)
-    metrics_b = evaluate_mode("Mode B (Story Analyzer)", use_analyzer=True)
+    # Run Benchmark
+    metrics = evaluate_mode()
     
     # Generate Output
-    report = f"# AutoShorts Phase 4 Benchmark Report\\n\\n"
-    report += f"**Date:** {datetime.now().isoformat()}\\n"
-    report += f"**Model:** {MODEL}\\n"
-    report += f"**Prompt Version:** {prompt_version}\\n"
-    report += f"**Dataset Version:** {DATASET_VERSION} ({len(DATASET)} videos)\\n\\n"
+    report = f"# AutoShorts Phase 4.5 Benchmark Report\n\n"
+    report += f"**Date:** {datetime.now().isoformat()}\n"
+    report += f"**Model:** {MODEL}\n"
+    report += f"**Prompt Version:** {prompt_version}\n"
+    report += f"**Dataset Version:** {DATASET_VERSION} ({len(DATASET)} videos)\n\n"
     
-    report += "## Mode A vs Mode B Comparison\\n\\n"
-    report += "| Metric | Mode A (Single Pass) | Mode B (Two Pass Analyzer) |\\n"
-    report += "|---|---|---|\\n"
+    report += "## Performance Metrics\n\n"
+    report += "| Metric | Result |\n"
+    report += "|---|---|\n"
     
     for key in ['json_validity', 'parsing_success', 'llm_failures']:
-        report += f"| {key} | {metrics_a[key]}/{metrics_a['runs']} | {metrics_b[key]}/{metrics_b['runs']} |\\n"
+        report += f"| {key} | {metrics[key]}/{metrics['runs']} |\n"
         
-    report += f"| Avg Time per Video | {metrics_a['total_time']/max(1, metrics_a['runs']):.2f}s | {metrics_b['total_time']/max(1, metrics_b['runs']):.2f}s |\\n"
-    report += f"| Avg Prompt Tokens | {metrics_a['total_prompt_tokens']/max(1, metrics_a['runs']):.1f} | {metrics_b['total_prompt_tokens']/max(1, metrics_b['runs']):.1f} |\\n"
-    report += f"| Avg Completion Tokens | {metrics_a['total_completion_tokens']/max(1, metrics_a['runs']):.1f} | {metrics_b['total_completion_tokens']/max(1, metrics_b['runs']):.1f} |\\n"
-    report += f"| Total Candidates | {metrics_a['total_candidates']} | {metrics_b['total_candidates']} |\\n"
-    report += f"| Avg Segments/Candidate | {metrics_a['total_segments']/max(1, metrics_a['total_candidates']):.2f} | {metrics_b['total_segments']/max(1, metrics_b['total_candidates']):.2f} |\\n"
-    report += f"| Avg AI Confidence | {metrics_a['avg_confidence']:.2f} | {metrics_b['avg_confidence']:.2f} |\\n"
-    report += f"| Avg AI Score | {metrics_a['avg_score']:.2f} | {metrics_b['avg_score']:.2f} |\\n\\n"
+    report += f"| Avg Time per Video | {metrics['total_time']/max(1, metrics['runs']):.2f}s |\n"
+    report += f"| Avg Prompt Tokens | {metrics['total_prompt_tokens']/max(1, metrics['runs']):.1f} |\n"
+    report += f"| Avg Completion Tokens | {metrics['total_completion_tokens']/max(1, metrics['runs']):.1f} |\n"
+    report += f"| Total Candidates | {metrics['total_candidates']} |\n"
+    report += f"| Avg Segments/Candidate | {metrics['total_segments']/max(1, metrics['total_candidates']):.2f} |\n"
+    report += f"| Avg AI Confidence | {metrics['avg_confidence']:.2f} |\n"
+    report += f"| Avg AI Score | {metrics['avg_score']:.2f} |\n\n"
     
     # Regression logic
     baseline_file = "baseline_metrics.json"
@@ -292,50 +281,50 @@ def run_benchmark():
         with open(baseline_file, 'r') as f:
             baseline = json.load(f)
             
-        report += "## Regression Analysis (vs Baseline)\\n"
+        report += "## Regression Analysis (vs Phase 4 Baseline)\n"
         old_val = baseline.get("parsing_success", 0)
-        new_val = metrics_b["parsing_success"]
+        new_val = metrics["parsing_success"]
         if new_val < old_val:
-            report += f"- ❌ Parsing Success degraded from {old_val} to {new_val}.\\n"
+            report += f"- ❌ Parsing Success degraded from {old_val} to {new_val}.\n"
             status = "FAIL"
         else:
-            report += f"- ✅ Parsing Success steady or improved ({new_val}).\\n"
+            report += f"- ✅ Parsing Success steady or improved ({new_val}).\n"
             
         old_time = baseline.get("avg_time", 999)
-        new_time = metrics_b["total_time"]/max(1, metrics_b["runs"])
+        new_time = metrics["total_time"]/max(1, metrics["runs"])
         if new_time > old_time * 1.5:
-            report += f"- ❌ Latency degraded significantly ({old_time:.2f}s -> {new_time:.2f}s).\\n"
+            report += f"- ❌ Latency degraded significantly ({old_time:.2f}s -> {new_time:.2f}s).\n"
             status = "FAIL"
         else:
-            report += f"- ✅ Latency acceptable ({new_time:.2f}s).\\n"
+            report += f"- ✅ Latency acceptable ({new_time:.2f}s vs old {old_time:.2f}s).\n"
     else:
-        report += "## Regression Analysis\\n*No baseline found. Saving current Mode B as baseline.*\\n"
+        report += "## Regression Analysis\n*No baseline found. Saving current Mode as baseline.*\n"
         
-    report += f"\\n### Overall Status: **{status}**\\n"
+    report += f"\n### Overall Status: **{status}**\n"
 
-    # Save Baseline
-    with open(baseline_file, 'w') as f:
-        json.dump({
-            "parsing_success": metrics_b["parsing_success"],
-            "avg_time": metrics_b["total_time"]/max(1, metrics_b["runs"])
-        }, f)
+    # Save Baseline if PASS
+    if status == "PASS":
+        with open(baseline_file, 'w') as f:
+            json.dump({
+                "parsing_success": metrics["parsing_success"],
+                "avg_time": metrics["total_time"]/max(1, metrics["runs"])
+            }, f)
 
     # Save Markdown
     with open("benchmark_dashboard.md", "w") as f:
         f.write(report)
         
-    print(f"\\nStatus: {status}")
+    print(f"\nStatus: {status}")
     print("Generated benchmark_dashboard.md")
 
     # Write CSV
-    all_csv_data = metrics_a['csv_data'] + metrics_b['csv_data']
-    if all_csv_data:
+    if metrics['csv_data']:
         csv_filename = f"human_evaluation_{prompt_version}.csv"
-        keys = all_csv_data[0].keys()
+        keys = metrics['csv_data'][0].keys()
         with open(csv_filename, 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
-            dict_writer.writerows(all_csv_data)
+            dict_writer.writerows(metrics['csv_data'])
         print(f"Generated {csv_filename}")
 
 if __name__ == "__main__":
