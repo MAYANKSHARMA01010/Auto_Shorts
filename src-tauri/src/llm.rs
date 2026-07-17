@@ -12,41 +12,72 @@ use serde_json::json;
 
 use crate::models::{CandidateDraft, NormalizedTranscript, TranscriptSegment};
 
-fn build_prompt(segments: &str) -> String {
+fn build_prompt(segments: &str, analysis: &str) -> String {
     format!(
 r#"You are an expert short-form video editor for YouTube Shorts, Instagram Reels, and TikTok.
+Your goal is to create the most engaging, complete, and natural story possible. You are NOT a timestamp finder; you are creating a brand new edit. The transcript represents raw footage.
 
-Your goal is NOT to find arbitrary timestamps.
-Your goal is to create the most engaging, complete, and natural story possible.
+==================================================
+EDITOR PHILOSOPHY & PRINCIPLES
+==================================================
+- Every second must earn its place. If something does not increase curiosity, emotion, understanding, or move the story forward—remove it.
+- Never remove context, setup, or payoff unless they are genuinely unnecessary.
+- The AI should NEVER assume that one continuous clip is best. You may trim, remove, merge, stitch, compress, shorten, and combine multiple transcript regions to produce the strongest possible story.
+- There is no preferred editing style. Only viewer retention matters.
+- A clip MUST be at least 30 seconds long.
+- A complete story with a slightly lower viral potential is ALWAYS better than an incomplete story with a higher viral score.
 
-RULES
-1. Every clip must tell one complete idea or story.
-2. The total stitched duration must be AT LEAST 30 seconds.
-3. There is NO maximum duration. End only when the story reaches its natural conclusion.
-4. You may use multiple non-contiguous segments.
-5. Remove only filler, silence, repeated information, long pauses, sponsor sections, or unrelated tangents.
-6. Never remove context that makes the story confusing.
-7. Never start or end in the middle of a sentence.
-8. Never remove setup if it is required for the payoff.
-9. Never remove the payoff.
-10. Prefer fewer, longer segments instead of many tiny cuts.
-11. Do not create more than 6 segments unless absolutely necessary.
-12. If two selected segments are separated by only a few seconds of unimportant content, prefer one continuous segment.
-13. CRITICAL: To make a clip long enough, you MUST combine multiple consecutive transcript lines into a single segment. 
-14. Use the start time of the FIRST line and the end time of the LAST line to form a long segment. Do NOT just copy a single 2-second line.
-15. Return clips sorted from highest quality to lowest quality.
+==================================================
+STORY ANALYZER & CONTENT CLASSIFICATION
+==================================================
+The following analysis has been performed on the transcript:
+{analysis}
 
-When scoring clips, prioritize:
-1. Story completeness
-2. Viewer retention
-3. Strong opening hook
-4. Curiosity
-5. Emotional impact
-6. Entertainment or educational value
-7. Shareability
-8. Natural flow after stitching
+Adapt your editing strategy automatically based on this analysis.
 
-A complete story with a slightly lower viral potential is ALWAYS better than an incomplete story with a higher viral score.
+==================================================
+EDITING STYLES & DIVERSITY
+==================================================
+Choose the structure that maximizes retention. Possible editing styles include:
+- continuous clip
+- stitched edit
+- montage
+- before -> after
+- problem -> solution
+- setup -> payoff
+- question -> answer
+- challenge -> resolution
+- explanation -> demonstration
+
+Candidate Diversity: Do not generate near-duplicate candidates. Each candidate should represent a genuinely different editing strategy whenever appropriate (e.g., Story-focused vs. High-retention fast pacing vs. Educational clarity).
+
+==================================================
+STITCHING RULES & PACE OPTIMIZATION
+==================================================
+- Feel free to take 12 seconds from minute 2, combine with 18 seconds from minute 7, and 15 seconds from minute 14 if together they produce the strongest story.
+- Never destroy chronology unless explicitly supported by the source material. Never create misleading narratives or fabricate meaning.
+- Constantly ask: "Would the average Shorts viewer swipe away here?" If yes: remove, compress, or jump forward.
+- CRITICAL: To make a clip long enough, you MUST combine multiple consecutive transcript lines into a single segment. Use the start time of the FIRST line and the end time of the LAST line to form a long segment. Do NOT just copy a single 2-second line.
+
+==================================================
+INTERNAL MULTI-PASS REASONING
+==================================================
+Perform the following reasoning internally before producing your answer. Do NOT reveal your reasoning. Return ONLY the required JSON.
+- Pass 1: Understand transcript
+- Pass 2: Identify interesting moments
+- Pass 3: Group related moments
+- Pass 4: Determine content type
+- Pass 5: Choose editing strategy
+- Pass 6: Construct complete story
+- Pass 7: Optimize pacing
+- Pass 8: Merge nearby segments
+- Pass 9: Remove weak moments
+- Pass 10: Validate final edit
+
+==================================================
+OPTIONAL METADATA
+==================================================
+You may optionally output your chosen `editing_strategy` (e.g. "problem -> solution") and a `confidence` score (e.g. 0.95) for each candidate.
 
 Return ONLY valid JSON strictly in the following schema:
 {{
@@ -55,6 +86,8 @@ Return ONLY valid JSON strictly in the following schema:
       "score": 9.7,
       "hook": "The first spoken sentence that hooks the viewer",
       "rationale": "Why this edit works well for viral short form",
+      "editing_strategy": "problem -> solution",
+      "confidence": 0.92,
       "segments": [
         {{
           "start": 12.5,
@@ -67,11 +100,41 @@ Return ONLY valid JSON strictly in the following schema:
 }}
 
 Transcript:
-{segments}"#
+{segments}"#,
+        analysis = analysis,
+        segments = segments
     )
 }
 
+pub async fn analyze_story(
+    segments_text: &str,
+    api_key: Option<&str>,
+    provider: &str,
+    model_name: &str,
+) -> String {
+    let prompt = format!(
+        "You are an expert story analyzer for short-form video.\n\
+        Analyze the following transcript.\n\
+        Output a short, concise analysis consisting of exactly 3 parts:\n\
+        1. CONTENT TYPE: (e.g., Storytelling, Tutorial, Podcast, Interview, Comedy, Educational, Documentary)\n\
+        2. EMOTIONAL PEAKS: (Briefly list 2-3 most engaging moments)\n\
+        3. RECOMMENDED STRATEGY: (Briefly suggest the best editing structure such as 'problem -> solution', 'montage', 'setup -> payoff', or 'preserve narrative arc')\n\n\
+        Transcript:\n\
+        {}", segments_text
+    );
 
+    let raw_response = match provider {
+        "deepseek" => call_deepseek_raw(&prompt, api_key.unwrap_or_default()).await,
+        "claude" => call_claude_raw(&prompt, api_key.unwrap_or_default()).await,
+        "gemini" => call_gemini_raw(&prompt, api_key.unwrap_or_default()).await,
+        "openai" => call_openai_raw(&prompt, api_key.unwrap_or_default(), model_name).await,
+        "openrouter" => call_openrouter_raw(&prompt, api_key.unwrap_or_default(), model_name).await,
+        "ollama" => call_ollama_raw(&prompt, model_name).await,
+        _ => Ok("CONTENT TYPE: General\nRECOMMENDED STRATEGY: preserve narrative arc".to_string()),
+    };
+
+    raw_response.unwrap_or_else(|_| "CONTENT TYPE: General\nRECOMMENDED STRATEGY: preserve narrative arc".to_string())
+}
 
 #[derive(Debug, Deserialize)]
 struct AnthropicMessage {
@@ -104,7 +167,8 @@ pub async fn detect_candidates_with_deepseek(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let prompt = build_prompt(&segments);
+    let analysis = analyze_story(&segments, Some(api_key), "deepseek", "deepseek-chat").await;
+    let prompt = build_prompt(&segments, &analysis);
 
     let response = get_client()
         .post("https://api.deepseek.com/chat/completions")
@@ -168,7 +232,8 @@ pub async fn detect_candidates_with_gemini(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let prompt = build_prompt(&segments);
+    let analysis = analyze_story(&segments, Some(api_key), "gemini", "gemini-2.5-flash").await;
+    let prompt = build_prompt(&segments, &analysis);
 
     let model = std::env::var("GEMINI_MODEL").unwrap_or_else(|_| "gemini-2.5-flash".to_string());
     let url = format!(
@@ -235,9 +300,11 @@ pub async fn detect_candidates_with_openai(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let prompt = build_prompt(&segments);
-
     let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    let analysis = analyze_story(&segments, Some(api_key), "openai", &model).await;
+    let prompt = build_prompt(&segments, &analysis);
+
+
 
     let response = get_client()
         .post("https://api.openai.com/v1/chat/completions")
@@ -282,10 +349,11 @@ pub async fn detect_candidates_with_openrouter(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let prompt = build_prompt(&segments);
+    let model = std::env::var("OPENROUTER_MODEL").unwrap_or_else(|_| "google/gemini-2.5-flash".to_string());
+    let analysis = analyze_story(&segments, Some(api_key), "openrouter", &model).await;
+    let prompt = build_prompt(&segments, &analysis);
 
-    let model =
-        std::env::var("OPENROUTER_MODEL").unwrap_or_else(|_| "google/gemini-2.5-flash".to_string());
+
 
     let response = get_client()
         .post("https://openrouter.ai/api/v1/chat/completions")
@@ -338,7 +406,8 @@ pub async fn detect_candidates_with_claude(
     api_key: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let prompt = build_prompt(&segments);
+    let analysis = analyze_story(&segments, Some(api_key), "claude", "claude-3-5-sonnet-latest").await;
+    let prompt = build_prompt(&segments, &analysis);
 
     let model =
         std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "claude-3-5-sonnet-latest".to_string());
@@ -394,7 +463,8 @@ pub async fn detect_candidates_with_local_llm(
     model_name: &str,
 ) -> Result<Vec<CandidateDraft>> {
     let segments = compact_segments(&transcript.segments);
-    let prompt = build_prompt(&segments);
+    let analysis = analyze_story(&segments, None, "ollama", model_name).await;
+    let prompt = build_prompt(&segments, &analysis);
 
     let response = get_client()
         .post("http://localhost:11434/api/chat")
@@ -421,6 +491,8 @@ pub async fn detect_candidates_with_local_llm(
                                 "score": { "type": "number" },
                                 "hook": { "type": "string" },
                                 "rationale": { "type": "string" },
+                                "editing_strategy": { "type": "string" },
+                                "confidence": { "type": "number" },
                                 "segments": {
                                     "type": "array",
                                     "items": {
@@ -563,6 +635,13 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
             .unwrap_or("")
             .to_string();
 
+        let editing_strategy = item.get("editing_strategy").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let confidence = item.get("confidence").and_then(|v| {
+            if let Some(f) = v.as_f64() { Some(f) }
+            else if let Some(s) = v.as_str() { s.parse::<f64>().ok() }
+            else { None }
+        });
+
         let mut segments = Vec::new();
         if let Some(segs) = item.get("segments").and_then(|v| v.as_array()) {
             for seg in segs {
@@ -617,8 +696,10 @@ fn parse_candidate_json(text: &str, min_duration: f64) -> Result<Vec<CandidateDr
                 score,
                 hook,
                 rationale,
-                title,
-                description,
+                title: None,
+                description: None,
+                editing_strategy,
+                confidence,
             });
         }
     }

@@ -101,6 +101,8 @@ impl Database {
         let _ = conn.execute("ALTER TABLE candidates ADD COLUMN title TEXT", []);
         let _ = conn.execute("ALTER TABLE candidates ADD COLUMN description TEXT", []);
         let _ = conn.execute("ALTER TABLE candidates ADD COLUMN segments TEXT DEFAULT '[]'", []);
+        let _ = conn.execute("ALTER TABLE candidates ADD COLUMN editing_strategy TEXT", []);
+        let _ = conn.execute("ALTER TABLE candidates ADD COLUMN confidence REAL", []);
         Ok(())
     }
 
@@ -283,14 +285,17 @@ impl Database {
                 rank: max_rank + (index as i64) + 1,
                 selected: index < selected_cutoff,
                 title: draft.title.clone(),
-                description: draft.description.clone(), review: None, prediction: None,
+                description: draft.description.clone(), 
+                editing_strategy: draft.editing_strategy.clone(),
+                confidence: draft.confidence,
+                review: None, prediction: None,
             };
 
             let segments_json = serde_json::to_string(&candidate.segments).unwrap_or_else(|_| "[]".to_string());
 
             conn.execute(
-                "INSERT INTO candidates (id, project_id, segments, score, hook, rationale, rank, selected, title, description, start_sec, end_sec)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0.0, 0.0)",
+                "INSERT INTO candidates (id, project_id, segments, score, hook, rationale, rank, selected, title, description, start_sec, end_sec, editing_strategy, confidence)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0.0, 0.0, ?11, ?12)",
                 params![
                     &candidate.id,
                     &candidate.project_id,
@@ -302,6 +307,8 @@ impl Database {
                     if candidate.selected { 1 } else { 0 },
                     &candidate.title,
                     &candidate.description,
+                    &candidate.editing_strategy,
+                    &candidate.confidence,
                 ],
             )?;
 
@@ -343,14 +350,17 @@ impl Database {
             rank: max_rank + 1,
             selected: true,
             title: None,
-            description: None, review: None, prediction: None,
+            description: None, 
+            editing_strategy: None,
+            confidence: None,
+            review: None, prediction: None,
         };
 
         let segments_json = serde_json::to_string(&candidate.segments).unwrap_or_else(|_| "[]".to_string());
 
         conn.execute(
-            "INSERT INTO candidates (id, project_id, segments, score, hook, rationale, rank, selected, title, description, start_sec, end_sec)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0.0, 0.0)",
+            "INSERT INTO candidates (id, project_id, segments, score, hook, rationale, rank, selected, title, description, start_sec, end_sec, editing_strategy, confidence)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0.0, 0.0, ?11, ?12)",
             params![
                 &candidate.id,
                 &candidate.project_id,
@@ -361,7 +371,9 @@ impl Database {
                 candidate.rank,
                 if candidate.selected { 1 } else { 0 },
                 &candidate.title,
-                &candidate.description
+                &candidate.description,
+                &candidate.editing_strategy,
+                &candidate.confidence
             ],
         )?;
 
@@ -412,6 +424,8 @@ impl Database {
                     selected: selected == 1,
                     title: row.get(17)?,
                     description: row.get(18)?,
+                    editing_strategy: None,
+                    confidence: None,
                     review: None, prediction: None,
                 };
                 let project = Project {
@@ -650,6 +664,8 @@ fn candidate_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Candidate> {
         selected: selected == 1,
         title: row.get(8)?,
         description: row.get(9)?,
+        editing_strategy: row.get("editing_strategy").unwrap_or(None),
+        confidence: row.get("confidence").unwrap_or(None),
         review,
         prediction,
     })

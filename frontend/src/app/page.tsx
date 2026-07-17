@@ -120,6 +120,8 @@ type Candidate = {
   selected: boolean;
   title?: string;
   description?: string;
+  editing_strategy?: string;
+  confidence?: number;
   review?: CandidateReview;
   prediction?: ViralPrediction;
 };

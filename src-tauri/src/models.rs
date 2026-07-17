@@ -66,6 +66,8 @@ pub struct Candidate {
     pub selected: bool,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub editing_strategy: Option<String>,
+    pub confidence: Option<f64>,
     pub review: Option<CandidateReview>,
     pub prediction: Option<ViralPrediction>,
 }
@@ -195,6 +197,8 @@ pub struct CandidateDraft {
     pub rationale: String,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub editing_strategy: Option<String>,
+    pub confidence: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
