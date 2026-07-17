@@ -405,6 +405,7 @@ struct TranscriptionProgressPayload {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn transcribe_project(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
@@ -535,6 +536,64 @@ async fn transcribe_project(
             }
         }
     }
+
+    // ── Enrichment Step (Video Understanding) ──────────────────────────────
+    emit_progress("Enriching Transcript", 0.0);
+    let audio_path_expected = data_dir.join("projects").join(&project_id).join("audio.wav");
+    let temp_json_path = data_dir.join(format!("temp_{}.json", uuid::Uuid::new_v4()));
+    let temp_out_path = data_dir.join(format!("out_{}.json", uuid::Uuid::new_v4()));
+    if let Ok(json_str) = serde_json::to_string(&transcript) {
+        let _ = std::fs::write(&temp_json_path, &json_str);
+        
+        // Find python in workspace
+        let possible_venvs = vec![
+            ".venv/bin/python3",
+            "../.venv/bin/python3",
+            "venv/bin/python3",
+            "../venv/bin/python3",
+        ];
+        let mut python_cmd = "python3".to_string();
+        for v in possible_venvs {
+            if std::path::Path::new(v).exists() {
+                python_cmd = v.to_string();
+                break;
+            }
+        }
+
+        let py_script = std::env::current_dir().unwrap_or_default().join("../scripts/enrich_transcript.py");
+        let script_path = if py_script.exists() {
+            py_script.to_string_lossy().to_string()
+        } else {
+            "../scripts/enrich_transcript.py".to_string()
+        };
+
+        let output = std::process::Command::new(python_cmd)
+            .arg(&script_path)
+            .arg("--video")
+            .arg(&project.source_path)
+            .arg("--audio")
+            .arg(&audio_path_expected)
+            .arg("--transcript")
+            .arg(&temp_json_path)
+            .arg("--output")
+            .arg(&temp_out_path)
+            .output();
+            
+        if let Ok(out) = output {
+            if out.status.success() {
+                if let Ok(enriched_bytes) = std::fs::read(&temp_out_path) {
+                    if let Ok(enriched) = serde_json::from_slice::<crate::models::NormalizedTranscript>(&enriched_bytes) {
+                        transcript = enriched;
+                    }
+                }
+            } else {
+                eprintln!("[enrichment] Failed: {}", String::from_utf8_lossy(&out.stderr));
+            }
+        }
+        let _ = std::fs::remove_file(&temp_json_path);
+        let _ = std::fs::remove_file(&temp_out_path);
+    }
+    emit_progress("Enriching Transcript", 100.0);
 
     let raw_json = serde_json::to_string_pretty(&transcript).map_err(to_command_error)?;
     let saved = db

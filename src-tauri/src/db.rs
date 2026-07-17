@@ -278,7 +278,7 @@ impl Database {
             )
             .unwrap_or(0);
 
-        let selected_cutoff = drafts.len().min(6).max(3).min(drafts.len());
+        let selected_cutoff = drafts.len().clamp(3, 6).min(drafts.len());
         let mut candidates = Vec::with_capacity(drafts.len());
 
         for (index, draft) in drafts.iter().enumerate() {

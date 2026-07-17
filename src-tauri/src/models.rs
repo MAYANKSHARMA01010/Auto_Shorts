@@ -181,11 +181,29 @@ pub struct TranscriptWord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AudioMetadata {
+    pub average_volume: Option<f64>,
+    pub speaking_rate: Option<f64>,
+    pub is_silence: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisualMetadata {
+    pub scene_change: Option<bool>,
+    pub motion_level: Option<String>,
+    pub face_present: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TranscriptSegment {
     pub start: f64,
     pub end: f64,
     pub speaker: Option<String>,
     pub text: String,
+    pub audio_metadata: Option<AudioMetadata>,
+    pub visual_metadata: Option<VisualMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

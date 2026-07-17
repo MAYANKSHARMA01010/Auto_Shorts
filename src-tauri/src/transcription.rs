@@ -132,6 +132,8 @@ pub fn build_segments(words: &[TranscriptWord]) -> Vec<TranscriptSegment> {
                     end: word.end,
                     speaker: word.speaker.clone(),
                     text: word.text.clone(),
+                    audio_metadata: None,
+                    visual_metadata: None,
                 });
             }
         }
@@ -195,6 +197,8 @@ fn normalize_whisper_raw_json(raw: serde_json::Value) -> Result<NormalizedTransc
             end,
             speaker: Some("S1".to_string()),
             text,
+            audio_metadata: None,
+            visual_metadata: None,
         });
 
         if let Some(words_arr) = seg.get("words").and_then(|v| v.as_array()) {
@@ -269,7 +273,7 @@ pub async fn transcribe_local_with_progress(
             if let (Some(stdout), Some(ref on_prog)) = (child.stdout.take(), on_progress) {
                 use std::io::{BufRead, BufReader};
                 let reader = BufReader::new(stdout);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     // Look for "[00:00.000 --> 00:05.000]"
                     if line.starts_with('[') {
                         if let Some(arrow_idx) = line.find("-->") {
@@ -623,7 +627,7 @@ if __name__ == "__main__":
             if let (Some(stdout), Some(ref on_prog)) = (child.stdout.take(), on_progress) {
                 use std::io::{BufRead, BufReader};
                 let reader = BufReader::new(stdout);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     // Look for "[00:00.000 --> 00:05.000]"
                     if line.starts_with('[') {
                         if let Some(arrow_idx) = line.find("-->") {
@@ -749,6 +753,8 @@ pub fn parse_vtt(content: &str) -> Result<NormalizedTranscript> {
                 end: end_sec,
                 text: text.clone(),
                 speaker: None,
+                audio_metadata: None,
+                visual_metadata: None,
             });
             if end_sec > duration {
                 duration = end_sec;

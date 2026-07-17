@@ -8,13 +8,13 @@ from datetime import datetime
 import hashlib
 import statistics
 
-# Benchmark Script for AutoShorts AI Editing Intelligence (Phase 4.5)
-# Regression Testing and Single Pass Evaluation.
+# Benchmark Script for AutoShorts AI Editing Intelligence (Phase 5)
+# Evaluates 4 Multimodal Modes: Text Only, Text+Audio, Text+Visual, Text+All
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "qwen2.5" 
 
-DATASET_VERSION = "v1.0"
+DATASET_VERSION = "v1.1"
 
 # Mock Dataset representing various categories and multimodal hooks
 DATASET = [
@@ -22,22 +22,32 @@ DATASET = [
         "id": "vid_01",
         "category": "Podcast",
         "duration": 60.0,
-        "transcript": "[0.00-15.00] Speaker 1: AI is changing the world.\n[15.00-30.00] Speaker 2: Yes, it is moving so fast.\n[30.00-45.00] Speaker 1: What happens in 5 years?\n[45.00-60.00] Speaker 2: We might have AGI.",
-        "hooks": {"scene_changes": [15.0, 30.0, 45.0], "visual_energy": "low"}
+        "segments": [
+            {"time": "[0.00-15.00]", "text": "Speaker 1: AI is changing the world.", "vis": "SceneChange=True, Motion=low, Face=True", "aud": "Silence=False, Vol=-15.0dB"},
+            {"time": "[15.00-30.00]", "text": "Speaker 2: Yes, it is moving so fast.", "vis": "SceneChange=False, Motion=medium, Face=True", "aud": "Silence=False, Vol=-14.0dB"},
+            {"time": "[30.00-45.00]", "text": "Speaker 1: What happens in 5 years?", "vis": "SceneChange=False, Motion=low, Face=True", "aud": "Silence=False, Vol=-16.0dB"},
+            {"time": "[45.00-60.00]", "text": "Speaker 2: We might have AGI.", "vis": "SceneChange=True, Motion=high, Face=True", "aud": "Silence=False, Vol=-12.0dB"}
+        ]
     },
     {
         "id": "vid_02",
         "category": "Tutorial",
         "duration": 50.0,
-        "transcript": "[0.00-10.00] Host: Today I'll show you how to bake a cake.\n[10.00-25.00] Host: First, get some flour.\n[25.00-40.00] Host: Next, mix it with eggs.\n[40.00-50.00] Host: Finally, put it in the oven.",
-        "hooks": {"scene_changes": [10.0, 25.0, 40.0], "visual_energy": "medium"}
+        "segments": [
+            {"time": "[0.00-10.00]", "text": "Host: Today I'll show you how to bake a cake.", "vis": "SceneChange=True, Motion=low, Face=True", "aud": "Silence=False, Vol=-18.0dB"},
+            {"time": "[10.00-25.00]", "text": "Host: First, get some flour.", "vis": "SceneChange=True, Motion=high, Face=False", "aud": "Silence=False, Vol=-20.0dB"},
+            {"time": "[25.00-40.00]", "text": "Host: Next, mix it with eggs.", "vis": "SceneChange=False, Motion=high, Face=False", "aud": "Silence=False, Vol=-19.0dB"},
+            {"time": "[40.00-50.00]", "text": "Host: Finally, put it in the oven.", "vis": "SceneChange=True, Motion=low, Face=True", "aud": "Silence=False, Vol=-18.0dB"}
+        ]
     },
     {
         "id": "vid_03",
         "category": "Comedy",
         "duration": 40.0,
-        "transcript": "[0.00-20.00] Comedian: So I went to the store yesterday to buy milk.\n[20.00-40.00] Comedian: And the cow was working the register!",
-        "hooks": {"scene_changes": [], "visual_energy": "high"}
+        "segments": [
+            {"time": "[0.00-20.00]", "text": "Comedian: So I went to the store yesterday to buy milk.", "vis": "SceneChange=False, Motion=medium, Face=True", "aud": "Silence=False, Vol=-12.0dB"},
+            {"time": "[20.00-40.00]", "text": "Comedian: And the cow was working the register!", "vis": "SceneChange=True, Motion=high, Face=True", "aud": "Silence=False, Vol=-5.0dB"}
+        ]
     }
 ]
 
@@ -53,6 +63,17 @@ EDITOR PHILOSOPHY & PRINCIPLES
 - There is no preferred editing style. Only viewer retention matters.
 - A clip MUST be at least 30 seconds long.
 - A complete story with a slightly lower viral potential is ALWAYS better than an incomplete story with a higher viral score.
+
+==================================================
+MULTIMODAL HEURISTICS (AUDIO & VISUAL SIGNALS)
+==================================================
+You will receive [Aud: ...] and [Vis: ...] metadata tags attached to transcript segments.
+Use these signals to make better editing decisions:
+- **Scene Changes**: Prefer beginning a clip immediately after a scene change (e.g. `SceneChange=True`).
+- **Silence**: Avoid cutting during silence (`isSilence=True`) unless intentionally pacing a dramatic pause.
+- **Visual Energy**: Prefer cuts when visual energy or motion increases (`Motion=high`). Maintain visual continuity.
+- **Faces**: Prioritize retaining segments where faces are present (`Face=True`).
+These are heuristics, not rigid rules. The narrative story is always the priority.
 
 ==================================================
 EDITING STYLES & DIVERSITY
@@ -143,8 +164,8 @@ def run_ollama(prompt, schema=None):
         completion_tokens = result.get('eval_count', 0)
         return content, prompt_tokens, completion_tokens
 
-def evaluate_mode():
-    print(f"\nEvaluating Single Pass Mode...")
+def evaluate_mode(mode_name, include_audio, include_visual):
+    print(f"\nEvaluating Mode: {mode_name}...")
     schema = {
         "type": "object",
         "properties": {
@@ -180,17 +201,11 @@ def evaluate_mode():
 
     metrics = {
         "runs": 0,
-        "json_validity": 0,
-        "parsing_success": 0,
-        "llm_failures": 0,
         "total_time": 0,
         "total_prompt_tokens": 0,
         "total_completion_tokens": 0,
-        "total_candidates": 0,
-        "total_segments": 0,
         "avg_confidence": 0,
         "avg_score": 0,
-        "csv_data": []
     }
 
     confidences = []
@@ -198,47 +213,40 @@ def evaluate_mode():
 
     for item in DATASET:
         start_time = time.time()
-        try:
-            prompt_tokens, completion_tokens = 0, 0
-            prompt = PROMPT_TEMPLATE.replace("{transcript}", item["transcript"])
+        
+        # Build Transcript string for this mode
+        transcript_lines = []
+        for seg in item["segments"]:
+            tags = []
+            if include_visual:
+                tags.append(f"[Vis: {seg['vis']}]")
+            if include_audio:
+                tags.append(f"[Aud: {seg['aud']}]")
+                
+            prefix = " ".join(tags) + " " if tags else ""
+            transcript_lines.append(f"{seg['time']} {prefix}{seg['text']}")
             
+        transcript_str = "\n".join(transcript_lines)
+            
+        try:
+            prompt = PROMPT_TEMPLATE.replace("{transcript}", transcript_str)
             content, p_tok, c_tok = run_ollama(prompt, schema)
-            prompt_tokens += p_tok
-            completion_tokens += c_tok
             
             parsed = json.loads(content)
-            metrics['json_validity'] += 1
             
             if "candidates" in parsed:
-                metrics['parsing_success'] += 1
                 for idx, c in enumerate(parsed["candidates"]):
-                    metrics['total_candidates'] += 1
-                    segments = c.get("segments", [])
-                    metrics['total_segments'] += len(segments)
-                    
                     if "confidence" in c and isinstance(c["confidence"], (int, float)):
                         confidences.append(c["confidence"])
                     if "score" in c and isinstance(c["score"], (int, float)):
                         scores.append(c["score"])
                     
-                    metrics['csv_data'].append({
-                        "video_id": item["id"],
-                        "category": item["category"],
-                        "candidate_index": idx,
-                        "hook": c.get("hook", ""),
-                        "strategy": c.get("editing_strategy", "N/A"),
-                        "ai_confidence": c.get("confidence", "N/A"),
-                        "ai_score": c.get("score", "N/A"),
-                        "human_overall_score": ""
-                    })
-                    
         except Exception as e:
-            metrics['llm_failures'] += 1
             print(f"Error on {item['id']}: {e}")
             
         metrics['total_time'] += (time.time() - start_time)
-        metrics['total_prompt_tokens'] += prompt_tokens
-        metrics['total_completion_tokens'] += completion_tokens
+        metrics['total_prompt_tokens'] += p_tok
+        metrics['total_completion_tokens'] += c_tok
         metrics['runs'] += 1
 
     metrics['avg_confidence'] = statistics.mean(confidences) if confidences else 0
@@ -246,86 +254,37 @@ def evaluate_mode():
     return metrics
 
 def run_benchmark():
-    print(f"Starting Phase 4.5 Regression Framework...")
-    prompt_version = generate_prompt_version()
+    print(f"Starting Phase 5 Benchmark Framework...")
     
-    # Run Benchmark
-    metrics = evaluate_mode()
+    modes = [
+        {"name": "Text Only", "audio": False, "visual": False},
+        {"name": "Text + Audio", "audio": True, "visual": False},
+        {"name": "Text + Visual", "audio": False, "visual": True},
+        {"name": "Text + Audio + Visual", "audio": True, "visual": True},
+    ]
+    
+    results = {}
+    for m in modes:
+        results[m["name"]] = evaluate_mode(m["name"], m["audio"], m["visual"])
     
     # Generate Output
-    report = f"# AutoShorts Phase 4.5 Benchmark Report\n\n"
+    report = f"# AutoShorts Phase 5 Benchmark Dashboard\n\n"
     report += f"**Date:** {datetime.now().isoformat()}\n"
     report += f"**Model:** {MODEL}\n"
-    report += f"**Prompt Version:** {prompt_version}\n"
-    report += f"**Dataset Version:** {DATASET_VERSION} ({len(DATASET)} videos)\n\n"
     
-    report += "## Performance Metrics\n\n"
-    report += "| Metric | Result |\n"
-    report += "|---|---|\n"
+    report += "## Multimodal Performance Comparison\n\n"
+    report += "| Mode | Avg Score | Avg Confidence | Avg Latency/Vid | Avg Prompt Tokens | Avg Completion Tokens |\n"
+    report += "|---|---|---|---|---|---|\n"
     
-    for key in ['json_validity', 'parsing_success', 'llm_failures']:
-        report += f"| {key} | {metrics[key]}/{metrics['runs']} |\n"
+    for m in modes:
+        res = results[m["name"]]
+        runs = max(1, res["runs"])
+        report += f"| {m['name']} | {res['avg_score']:.2f} | {res['avg_confidence']:.2f} | {res['total_time']/runs:.2f}s | {res['total_prompt_tokens']/runs:.1f} | {res['total_completion_tokens']/runs:.1f} |\n"
         
-    report += f"| Avg Time per Video | {metrics['total_time']/max(1, metrics['runs']):.2f}s |\n"
-    report += f"| Avg Prompt Tokens | {metrics['total_prompt_tokens']/max(1, metrics['runs']):.1f} |\n"
-    report += f"| Avg Completion Tokens | {metrics['total_completion_tokens']/max(1, metrics['runs']):.1f} |\n"
-    report += f"| Total Candidates | {metrics['total_candidates']} |\n"
-    report += f"| Avg Segments/Candidate | {metrics['total_segments']/max(1, metrics['total_candidates']):.2f} |\n"
-    report += f"| Avg AI Confidence | {metrics['avg_confidence']:.2f} |\n"
-    report += f"| Avg AI Score | {metrics['avg_score']:.2f} |\n\n"
-    
-    # Regression logic
-    baseline_file = "baseline_metrics.json"
-    status = "PASS"
-    if os.path.exists(baseline_file):
-        with open(baseline_file, 'r') as f:
-            baseline = json.load(f)
-            
-        report += "## Regression Analysis (vs Phase 4 Baseline)\n"
-        old_val = baseline.get("parsing_success", 0)
-        new_val = metrics["parsing_success"]
-        if new_val < old_val:
-            report += f"- ❌ Parsing Success degraded from {old_val} to {new_val}.\n"
-            status = "FAIL"
-        else:
-            report += f"- ✅ Parsing Success steady or improved ({new_val}).\n"
-            
-        old_time = baseline.get("avg_time", 999)
-        new_time = metrics["total_time"]/max(1, metrics["runs"])
-        if new_time > old_time * 1.5:
-            report += f"- ❌ Latency degraded significantly ({old_time:.2f}s -> {new_time:.2f}s).\n"
-            status = "FAIL"
-        else:
-            report += f"- ✅ Latency acceptable ({new_time:.2f}s vs old {old_time:.2f}s).\n"
-    else:
-        report += "## Regression Analysis\n*No baseline found. Saving current Mode as baseline.*\n"
-        
-    report += f"\n### Overall Status: **{status}**\n"
-
-    # Save Baseline if PASS
-    if status == "PASS":
-        with open(baseline_file, 'w') as f:
-            json.dump({
-                "parsing_success": metrics["parsing_success"],
-                "avg_time": metrics["total_time"]/max(1, metrics["runs"])
-            }, f)
-
-    # Save Markdown
-    with open("benchmark_dashboard.md", "w") as f:
+    with open("benchmark_dashboard.md", "w", encoding='utf-8') as f:
         f.write(report)
         
-    print(f"\nStatus: {status}")
-    print("Generated benchmark_dashboard.md")
-
-    # Write CSV
-    if metrics['csv_data']:
-        csv_filename = f"human_evaluation_{prompt_version}.csv"
-        keys = metrics['csv_data'][0].keys()
-        with open(csv_filename, 'w', newline='') as output_file:
-            dict_writer = csv.DictWriter(output_file, keys)
-            dict_writer.writeheader()
-            dict_writer.writerows(metrics['csv_data'])
-        print(f"Generated {csv_filename}")
+    print(f"Benchmark complete. Dashboard saved to benchmark_dashboard.md.")
 
 if __name__ == "__main__":
     run_benchmark()

@@ -3,3 +3,7 @@ whisperx==3.8.6
 torch>=2.1.0
 torchaudio>=2.1.0
 openai-whisper
+opencv-python-headless
+numpy
+librosa
+mediapipe

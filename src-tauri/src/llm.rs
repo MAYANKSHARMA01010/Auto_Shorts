@@ -51,6 +51,17 @@ STITCHING RULES & PACE OPTIMIZATION
 - CRITICAL: To make a clip long enough, you MUST combine multiple consecutive transcript lines into a single segment. Use the start time of the FIRST line and the end time of the LAST line to form a long segment. Do NOT just copy a single 2-second line.
 
 ==================================================
+MULTIMODAL HEURISTICS (AUDIO & VISUAL SIGNALS)
+==================================================
+You will receive [Aud: ...] and [Vis: ...] metadata tags attached to transcript segments.
+Use these signals to make better editing decisions:
+- **Scene Changes**: Prefer beginning a clip immediately after a scene change (e.g. `SceneChange=True`).
+- **Silence**: Avoid cutting during silence (`isSilence=True`) unless intentionally pacing a dramatic pause.
+- **Visual Energy**: Prefer cuts when visual energy or motion increases (`Motion=high`). Maintain visual continuity.
+- **Faces**: Prioritize retaining segments where faces are present (`Face=True`).
+These are heuristics, not rigid rules. The narrative story is always the priority.
+
+==================================================
 INTERNAL MULTI-PASS REASONING
 ==================================================
 Perform the following reasoning internally before producing your answer. Do NOT reveal your reasoning. Return ONLY the required JSON.
@@ -490,9 +501,27 @@ fn compact_segments(segments: &[TranscriptSegment]) -> String {
         .iter()
         .map(|segment| {
             let speaker = segment.speaker.as_deref().unwrap_or("Speaker");
+            
+            let mut meta_str = String::new();
+            if let Some(vis) = &segment.visual_metadata {
+                meta_str.push_str(&format!(
+                    "[Vis: SceneChange={}, Motion={}, Face={}] ",
+                    vis.scene_change.unwrap_or(false),
+                    vis.motion_level.as_deref().unwrap_or("low"),
+                    vis.face_present.unwrap_or(false)
+                ));
+            }
+            if let Some(aud) = &segment.audio_metadata {
+                meta_str.push_str(&format!(
+                    "[Aud: Silence={}, Vol={:.1}dB] ",
+                    aud.is_silence.unwrap_or(false),
+                    aud.average_volume.unwrap_or(-100.0)
+                ));
+            }
+            
             format!(
-                "[{:.2}-{:.2}] {}: {}",
-                segment.start, segment.end, speaker, segment.text
+                "[{:.2}-{:.2}] {}{}: {}",
+                segment.start, segment.end, meta_str, speaker, segment.text
             )
         })
         .collect::<Vec<_>>()
@@ -703,7 +732,7 @@ const SPELLING_BATCH_SIZE: usize = 80;
 /// Fix spelling/punctuation of word texts using the configured LLM.
 /// Timestamps are NEVER changed — only the `.text` field of each word is corrected.
 pub async fn fix_spelling(
-    words: &mut Vec<crate::models::TranscriptWord>,
+    words: &mut [crate::models::TranscriptWord],
     provider: &str,
     api_key: Option<&str>,
     model_name: Option<&str>,
