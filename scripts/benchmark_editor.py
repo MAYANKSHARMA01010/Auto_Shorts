@@ -55,6 +55,20 @@ Return ONLY valid JSON strictly in the following schema:
 Transcript:
 {transcript}"""
 
+PROMPT_TEMPLATE_A = PROMPT_TEMPLATE + """
+==================================================
+MANDATORY EXPERIMENT A (MINIMUM SEGMENT RULE)
+You MUST stitch together AT LEAST TWO non-contiguous segments from different parts of the video.
+Do NOT just clip the first 15 seconds and stop. You must find a hook, skip some boring parts, and find a climax.
+"""
+
+PROMPT_TEMPLATE_B = PROMPT_TEMPLATE + """
+==================================================
+MANDATORY EXPERIMENT B (NARRATIVE ARC RULE)
+Every chosen segment must be labeled with its role in the story (Hook, Body, or Climax). 
+You must include at least one Hook segment and at least one Climax segment from the end of the video.
+"""
+
 def load_dataset():
     dataset_path = os.path.join(os.path.dirname(__file__), "evaluation", "ground_truth_dataset.json")
     with open(dataset_path, "r") as f:
@@ -103,12 +117,18 @@ def build_transcript_string(video, mode):
 def run_experiment_mode(mode: str, dataset: List[Dict], repetitions: int) -> Dict:
     latencies = []
     scores = []
+    raw_jsons = []
     
     for rep in range(repetitions):
         print(f"  [Repetition {rep+1}/{repetitions}]")
         for vid in dataset:
             transcript_str = build_transcript_string(vid, mode)
-            prompt = PROMPT_TEMPLATE.format(transcript=transcript_str)
+            if mode == "Experiment A (Min Segments)":
+                prompt = PROMPT_TEMPLATE_A.format(transcript=transcript_str)
+            elif mode == "Experiment B (Narrative Arc)":
+                prompt = PROMPT_TEMPLATE_B.format(transcript=transcript_str)
+            else:
+                prompt = PROMPT_TEMPLATE.format(transcript=transcript_str)
             
             res_str, lat = run_ollama(prompt, temperature=0.2)
             if res_str:
@@ -119,6 +139,10 @@ def run_experiment_mode(mode: str, dataset: List[Dict], repetitions: int) -> Dic
                         best_score = max([c.get("score", 0.0) for c in candidates])
                         scores.append(best_score)
                         latencies.append(lat)
+                        raw_jsons.append({
+                            "video_id": vid.get("id", "unknown"),
+                            "candidates": candidates
+                        })
                 except Exception as e:
                     print(f"Failed to parse JSON: {e}")
                     
@@ -126,14 +150,15 @@ def run_experiment_mode(mode: str, dataset: List[Dict], repetitions: int) -> Dic
         "latency": compute_statistics(latencies),
         "score": compute_statistics(scores),
         "raw_latency": latencies,
-        "raw_score": scores
+        "raw_score": scores,
+        "raw_jsons": raw_jsons
     }
 
 def main():
     print("Starting Scientific Validation Framework...")
     dataset = load_dataset()
     
-    modes_to_test = ["Text Only", "Text + Audio + Visual"]
+    modes_to_test = ["Text Only", "Experiment A (Min Segments)", "Experiment B (Narrative Arc)"]
     results = {}
     
     for mode in modes_to_test:
@@ -141,23 +166,32 @@ def main():
         results[mode] = run_experiment_mode(mode, dataset, REPETITIONS)
         
     baseline = results["Text Only"]
-    new_mode = results["Text + Audio + Visual"]
+    new_mode_A = results["Experiment A (Min Segments)"]
+    new_mode_B = results["Experiment B (Narrative Arc)"]
     
-    sig_results = {
-        "latency": analyze_statistical_significance(baseline["raw_latency"], new_mode["raw_latency"], higher_is_better=False),
-        "score": analyze_statistical_significance(baseline["raw_score"], new_mode["raw_score"], higher_is_better=True)
+    sig_results_A = {
+        "latency": analyze_statistical_significance(baseline["raw_latency"], new_mode_A["raw_latency"], higher_is_better=False),
+        "score": analyze_statistical_significance(baseline["raw_score"], new_mode_A["raw_score"], higher_is_better=True)
+    }
+    
+    sig_results_B = {
+        "latency": analyze_statistical_significance(baseline["raw_latency"], new_mode_B["raw_latency"], higher_is_better=False),
+        "score": analyze_statistical_significance(baseline["raw_score"], new_mode_B["raw_score"], higher_is_better=True)
     }
     
     context = get_reproducibility_context(MODEL, "v2.1", DATASET_VERSION, SEED, 0.2)
     
+    # Generate Dashboard for Experiment A
+    dashboard_path_A = os.path.join(os.path.dirname(__file__), "evaluation_dashboard_A.md")
+    generate_dashboard(context, new_mode_A, baseline, sig_results_A, dashboard_path_A)
+    
+    # Generate Dashboard for Experiment B
+    dashboard_path_B = os.path.join(os.path.dirname(__file__), "evaluation_dashboard_B.md")
+    generate_dashboard(context, new_mode_B, baseline, sig_results_B, dashboard_path_B)
+    
     # Log to history
-    record_benchmark_run(context, new_mode)
-    
-    # Generate Dashboard
-    dashboard_path = os.path.join(os.path.dirname(__file__), "evaluation_dashboard.md")
-    generate_dashboard(context, new_mode, baseline, sig_results, dashboard_path)
-    
-    print(f"\nExperiment Complete. Dashboard generated at {dashboard_path}.")
+    record_benchmark_run(context, new_mode_A)
+    record_benchmark_run(context, new_mode_B)
 
 if __name__ == "__main__":
     main()

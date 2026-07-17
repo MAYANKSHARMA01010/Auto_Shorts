@@ -1,6 +1,6 @@
 # AutoShorts Evaluation Dashboard (v2 - Statistical Rigor)
 
-**Date:** 2026-07-17T13:55:53.230362Z
+**Date:** 2026-07-17T14:09:42.014266Z
 **Model:** qwen2.5
 **Dataset:** v2.0
 **Prompt Version:** v2.1
@@ -24,23 +24,23 @@ This dashboard evaluates whether observed benchmark differences are statisticall
 
 | Mode | Mean Latency | Median Latency | Min | Max |
 |---|---|---|---|---|
-| Baseline | 11.67s | 9.62s | 8.97s | 18.48s |
-| New Mode | 11.43s | 11.03s | 9.26s | 14.41s |
+| Baseline | 10.00s | 9.78s | 8.33s | 13.80s |
+| New Mode | 12.58s | 12.76s | 10.01s | 15.92s |
 
 ## Statistical Validation (Hypothesis Testing)
 
 ### Latency Improvement
-- **Difference:** 2.06% (Higher is better / shorter latency)
-- **p-value:** 0.4692
-- **Effect Size (Cohen's d):** 0.07 (Negligible)
-- **Statistical Power Estimate:** Low (N<10)
-- **Recommendation:** **Needs More Data**
+- **Difference:** -25.74% (Higher is better / shorter latency)
+- **p-value:** 0.0000
+- **Effect Size (Cohen's d):** 1.79 (Large)
+- **Statistical Power Estimate:** High
+- **Recommendation:** **Reject (Statistically Significant Degradation)**
 
 ### Score Improvement
 - **Difference:** 0.00%
 - **p-value:** 1.0000
 - **Effect Size (Cohen's d):** 0.00 (Negligible)
-- **Statistical Power Estimate:** Low (N<10)
+- **Statistical Power Estimate:** Low
 - **Recommendation:** **Needs More Data**
 
 ---

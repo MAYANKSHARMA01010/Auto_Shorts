@@ -49,6 +49,7 @@ STITCHING RULES & PACE OPTIMIZATION
 - Never destroy chronology unless explicitly supported by the source material. Never create misleading narratives or fabricate meaning.
 - Constantly ask: "Would the average Shorts viewer swipe away here?" If yes: remove, compress, or jump forward.
 - CRITICAL: To make a clip long enough, you MUST combine multiple consecutive transcript lines into a single segment. Use the start time of the FIRST line and the end time of the LAST line to form a long segment. Do NOT just copy a single 2-second line.
+- NARRATIVE ARC RULE: Every chosen segment MUST be labeled with its role in the story (Hook, Body, or Climax). You MUST include at least one Hook segment and at least one Climax segment from the end of the video.
 
 ==================================================
 MULTIMODAL HEURISTICS (AUDIO & VISUAL SIGNALS)
@@ -93,7 +94,8 @@ Return ONLY valid JSON strictly in the following schema:
         {{
           "start": 12.5,
           "end": 45.2,
-          "text": "The exact transcript text here"
+          "text": "The exact transcript text here",
+          "role": "Hook"
         }}
       ]
     }}
@@ -461,9 +463,10 @@ pub async fn detect_candidates_with_local_llm(
                                         "properties": {
                                             "start": { "type": "number" },
                                             "end": { "type": "number" },
-                                            "text": { "type": "string" }
+                                            "text": { "type": "string" },
+                                            "role": { "type": "string" }
                                         },
-                                        "required": ["start", "end", "text"]
+                                        "required": ["start", "end", "text", "role"]
                                     }
                                 }
                             },

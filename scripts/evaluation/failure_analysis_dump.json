@@ -1,0 +1,74 @@
+[
+  {
+    "video_id": "vid_gt_01",
+    "candidates": [
+      {
+        "score": 9.7,
+        "hook": "AI is changing the world so fast.",
+        "rationale": "This sentence immediately grabs attention and sets the tone for the conversation about AI's rapid development.",
+        "confidence": 0.92,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 15.0,
+            "text": "AI is changing the world so fast."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "video_id": "vid_gt_02",
+    "candidates": [
+      {
+        "score": 9.7,
+        "hook": "Today I'll show you how to bake a cake.",
+        "rationale": "This sentence immediately engages the viewer by promising a tutorial and sets up the context for the rest of the video.",
+        "confidence": 0.92,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 10.0,
+            "text": "Today I'll show you how to bake a cake."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "video_id": "vid_gt_03",
+    "candidates": [
+      {
+        "score": 9.7,
+        "hook": "So I went to the store yesterday to buy milk.",
+        "rationale": "This sentence immediately sets up the unexpected scenario, which is a classic setup for comedy and hooks the viewer's interest right away.",
+        "confidence": 0.92,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 20.0,
+            "text": "So I went to the store yesterday to buy milk."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "video_id": "vid_gt_04",
+    "candidates": [
+      {
+        "score": 9.7,
+        "hook": "Black holes are one of the universe's greatest mysteries.",
+        "rationale": "This sentence immediately captures attention by highlighting the intrigue and mystery surrounding black holes, setting a strong hook for the video.",
+        "confidence": 0.92,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 15.0,
+            "text": "Black holes are one of the universe's greatest mysteries."
+          }
+        ]
+      }
+    ]
+  }
+]
