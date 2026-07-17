@@ -1,0 +1,61 @@
+[
+  {
+    "id": "vid_gt_01",
+    "category": "Podcast",
+    "duration": 60.0,
+    "language": "en",
+    "difficulty": "medium",
+    "source": "Tech Interview 2026",
+    "version": "v2.0",
+    "segments": [
+      {"time": "[0.00-15.00]", "text": "Host: AI is changing the world so fast.", "vis": "SceneChange=True, Motion=low, Face=True", "aud": "Silence=False, Vol=-15.0dB"},
+      {"time": "[15.00-30.00]", "text": "Guest: Yes, it's hard to keep up.", "vis": "SceneChange=False, Motion=medium, Face=True", "aud": "Silence=False, Vol=-14.0dB"},
+      {"time": "[30.00-45.00]", "text": "Host: What happens in 5 years?", "vis": "SceneChange=False, Motion=low, Face=True", "aud": "Silence=False, Vol=-16.0dB"},
+      {"time": "[45.00-60.00]", "text": "Guest: We might see the first signs of AGI.", "vis": "SceneChange=True, Motion=high, Face=True", "aud": "Silence=False, Vol=-12.0dB"}
+    ]
+  },
+  {
+    "id": "vid_gt_02",
+    "category": "Tutorial",
+    "duration": 50.0,
+    "language": "en",
+    "difficulty": "easy",
+    "source": "Baking 101",
+    "version": "v2.0",
+    "segments": [
+      {"time": "[0.00-10.00]", "text": "Host: Today I'll show you how to bake a cake.", "vis": "SceneChange=True, Motion=low, Face=True", "aud": "Silence=False, Vol=-18.0dB"},
+      {"time": "[10.00-25.00]", "text": "Host: First, get some flour.", "vis": "SceneChange=True, Motion=high, Face=False", "aud": "Silence=False, Vol=-20.0dB"},
+      {"time": "[25.00-40.00]", "text": "Host: Next, mix it with eggs.", "vis": "SceneChange=False, Motion=high, Face=False", "aud": "Silence=False, Vol=-19.0dB"},
+      {"time": "[40.00-50.00]", "text": "Host: Finally, put it in the oven.", "vis": "SceneChange=True, Motion=low, Face=True", "aud": "Silence=False, Vol=-18.0dB"}
+    ]
+  },
+  {
+    "id": "vid_gt_03",
+    "category": "Comedy",
+    "duration": 40.0,
+    "language": "en",
+    "difficulty": "hard",
+    "source": "Standup Special",
+    "version": "v2.0",
+    "segments": [
+      {"time": "[0.00-20.00]", "text": "Comedian: So I went to the store yesterday to buy milk.", "vis": "SceneChange=False, Motion=medium, Face=True", "aud": "Silence=False, Vol=-12.0dB"},
+      {"time": "[20.00-40.00]", "text": "Comedian: And the cow was working the register!", "vis": "SceneChange=True, Motion=high, Face=True", "aud": "Silence=False, Vol=-5.0dB"}
+    ]
+  },
+  {
+    "id": "vid_gt_04",
+    "category": "Educational",
+    "duration": 75.0,
+    "language": "en",
+    "difficulty": "medium",
+    "source": "Science Channel",
+    "version": "v2.0",
+    "segments": [
+      {"time": "[0.00-15.00]", "text": "Narrator: Black holes are one of the universe's greatest mysteries.", "vis": "SceneChange=True, Motion=low, Face=False", "aud": "Silence=False, Vol=-14.0dB"},
+      {"time": "[15.00-30.00]", "text": "Narrator: Their gravity is so intense, not even light escapes.", "vis": "SceneChange=False, Motion=high, Face=False", "aud": "Silence=False, Vol=-14.0dB"},
+      {"time": "[30.00-45.00]", "text": "Narrator: But what happens if you fall into one?", "vis": "SceneChange=True, Motion=medium, Face=False", "aud": "Silence=False, Vol=-10.0dB"},
+      {"time": "[45.00-60.00]", "text": "Narrator: You would undergo a process called spaghettification.", "vis": "SceneChange=False, Motion=low, Face=True", "aud": "Silence=False, Vol=-14.0dB"},
+      {"time": "[60.00-75.00]", "text": "Narrator: Stretched into a long, thin string of atoms.", "vis": "SceneChange=True, Motion=high, Face=False", "aud": "Silence=False, Vol=-12.0dB"}
+    ]
+  }
+]

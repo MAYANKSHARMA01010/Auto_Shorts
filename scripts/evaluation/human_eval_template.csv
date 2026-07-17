@@ -1,0 +1,9 @@
+video_id,reviewer_name,mode,hook_strength,story_clarity,pacing,emotional_impact,entertainment_value,educational_value,visual_continuity,overall_quality,notes
+vid_gt_01,Reviewer_1,Text+Audio+Visual,,,,,,,,,
+vid_gt_02,Reviewer_1,Text+Audio+Visual,,,,,,,,,
+vid_gt_03,Reviewer_1,Text+Audio+Visual,,,,,,,,,
+vid_gt_04,Reviewer_1,Text+Audio+Visual,,,,,,,,,
+vid_gt_01,Reviewer_2,Text Only,,,,,,,,,
+vid_gt_02,Reviewer_2,Text Only,,,,,,,,,
+vid_gt_03,Reviewer_2,Text Only,,,,,,,,,
+vid_gt_04,Reviewer_2,Text Only,,,,,,,,,
