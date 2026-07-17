@@ -124,7 +124,9 @@ def run_experiment_mode(mode: str, dataset: List[Dict], repetitions: int) -> Dic
                     
     return {
         "latency": compute_statistics(latencies),
-        "score": compute_statistics(scores)
+        "score": compute_statistics(scores),
+        "raw_latency": latencies,
+        "raw_score": scores
     }
 
 def main():
@@ -142,8 +144,8 @@ def main():
     new_mode = results["Text + Audio + Visual"]
     
     sig_results = {
-        "latency": analyze_statistical_significance(baseline["latency"], new_mode["latency"], higher_is_better=False),
-        "score": analyze_statistical_significance(baseline["score"], new_mode["score"], higher_is_better=True)
+        "latency": analyze_statistical_significance(baseline["raw_latency"], new_mode["raw_latency"], higher_is_better=False),
+        "score": analyze_statistical_significance(baseline["raw_score"], new_mode["raw_score"], higher_is_better=True)
     }
     
     context = get_reproducibility_context(MODEL, "v2.1", DATASET_VERSION, SEED, 0.2)

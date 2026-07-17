@@ -1,12 +1,12 @@
-# AutoShorts Evaluation Dashboard
+# AutoShorts Evaluation Dashboard (v2 - Statistical Rigor)
 
-**Date:** 2026-07-17T13:20:38.751012Z
+**Date:** 2026-07-17T13:34:46.529884Z
 **Model:** qwen2.5
 **Dataset:** v2.0
 **Prompt Version:** v2.1
 
 ## Executive Summary
-This dashboard compares the new execution against the baseline to validate whether observed improvements are statistically significant.
+This dashboard evaluates whether observed benchmark differences are statistically significant using formal hypothesis testing (Paired t-test) and effect size measurements (Cohen's d).
 
 ### Hardware & Reproducibility Context
 - **System:** Darwin 25.4.0 (arm)
@@ -24,20 +24,24 @@ This dashboard compares the new execution against the baseline to validate wheth
 
 | Mode | Mean Latency | Median Latency | Min | Max |
 |---|---|---|---|---|
-| Baseline | 9.89s | 9.46s | 8.18s | 18.48s |
-| New Mode | 11.89s | 12.32s | 8.89s | 15.46s |
+| Baseline | 9.54s | 9.13s | 7.98s | 17.18s |
+| New Mode | 12.47s | 12.24s | 9.10s | 19.47s |
 
-## Statistical Validation
+## Statistical Validation (Hypothesis Testing)
 
 ### Latency Improvement
-- **Improvement:** -20.27% (Higher is better / shorter latency)
-- **Statistically Significant?** ❌ NO
-- **Reason:** 95% Confidence Intervals do not overlap
+- **Difference:** -30.66% (Higher is better / shorter latency)
+- **p-value:** 0.0002
+- **Effect Size (Cohen's d):** 1.23 (Large)
+- **Statistical Power Estimate:** High
+- **Recommendation:** **Reject (Statistically Significant Degradation)**
 
 ### Score Improvement
-- **Improvement:** 0.00%
-- **Statistically Significant?** ❌ NO
-- **Reason:** 95% Confidence Intervals overlap
+- **Difference:** 0.00%
+- **p-value:** 1.0000
+- **Effect Size (Cohen's d):** 0.00 (Negligible)
+- **Statistical Power Estimate:** Low
+- **Recommendation:** **Needs More Data**
 
 ---
 *Generated automatically by AutoShorts Evaluation Framework.*

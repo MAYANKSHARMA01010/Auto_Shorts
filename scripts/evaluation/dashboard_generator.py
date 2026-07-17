@@ -1,9 +1,8 @@
 import os
-import json
 from typing import Dict, Any
 
 def generate_dashboard(context: Dict[str, Any], results: Dict[str, Any], baseline_results: Dict[str, Any], significance_results: Dict[str, Any], output_path: str):
-    dashboard_content = f"""# AutoShorts Evaluation Dashboard
+    dashboard_content = f"""# AutoShorts Evaluation Dashboard (v2 - Statistical Rigor)
 
 **Date:** {context['timestamp']}
 **Model:** {context['model']}
@@ -11,7 +10,7 @@ def generate_dashboard(context: Dict[str, Any], results: Dict[str, Any], baselin
 **Prompt Version:** {context['prompt_version']}
 
 ## Executive Summary
-This dashboard compares the new execution against the baseline to validate whether observed improvements are statistically significant.
+This dashboard evaluates whether observed benchmark differences are statistically significant using formal hypothesis testing (Paired t-test) and effect size measurements (Cohen's d).
 
 ### Hardware & Reproducibility Context
 - **System:** {context['hardware']['system']} {context['hardware']['release']} ({context['hardware']['processor']})
@@ -32,17 +31,21 @@ This dashboard compares the new execution against the baseline to validate wheth
 | Baseline | {baseline_results['latency']['mean']:.2f}s | {baseline_results['latency']['median']:.2f}s | {baseline_results['latency']['min']:.2f}s | {baseline_results['latency']['max']:.2f}s |
 | New Mode | {results['latency']['mean']:.2f}s | {results['latency']['median']:.2f}s | {results['latency']['min']:.2f}s | {results['latency']['max']:.2f}s |
 
-## Statistical Validation
+## Statistical Validation (Hypothesis Testing)
 
 ### Latency Improvement
-- **Improvement:** {significance_results['latency']['improvement_pct']:.2f}% (Higher is better / shorter latency)
-- **Statistically Significant?** {"✅ YES" if significance_results['latency']['significant'] else "❌ NO"}
-- **Reason:** {significance_results['latency']['reason']}
+- **Difference:** {significance_results['latency']['improvement_pct']:.2f}% (Higher is better / shorter latency)
+- **p-value:** {significance_results['latency']['p_value']:.4f}
+- **Effect Size (Cohen's d):** {significance_results['latency']['effect_size']:.2f} ({significance_results['latency']['effect_size_cat']})
+- **Statistical Power Estimate:** {significance_results['latency']['power']}
+- **Recommendation:** **{significance_results['latency']['recommendation']}**
 
 ### Score Improvement
-- **Improvement:** {significance_results['score']['improvement_pct']:.2f}%
-- **Statistically Significant?** {"✅ YES" if significance_results['score']['significant'] else "❌ NO"}
-- **Reason:** {significance_results['score']['reason']}
+- **Difference:** {significance_results['score']['improvement_pct']:.2f}%
+- **p-value:** {significance_results['score']['p_value']:.4f}
+- **Effect Size (Cohen's d):** {significance_results['score']['effect_size']:.2f} ({significance_results['score']['effect_size_cat']})
+- **Statistical Power Estimate:** {significance_results['score']['power']}
+- **Recommendation:** **{significance_results['score']['recommendation']}**
 
 ---
 *Generated automatically by AutoShorts Evaluation Framework.*
